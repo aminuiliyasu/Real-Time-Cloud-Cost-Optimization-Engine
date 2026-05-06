@@ -171,7 +171,7 @@ An application runs 24/7 but receives low traffic overnight.
 ### 1) Clone
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/aminuiliyasu/Real-Time-Cloud-Cost-Optimization-Engine.git
 cd Real-Time-Cloud-Cost-Optimization-Engine
 ```
 
