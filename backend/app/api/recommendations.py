@@ -9,7 +9,13 @@ from app.db.session import get_db
 from app.models.recommendation import Recommendation
 from app.models.resource import Resource
 from app.models.usage_metric import UsageMetric
+from app.schemas.audit_log import AuditLogOut
+from app.schemas.recommendation_actions import (
+    ApproveRecommendationRequest,
+    ExecuteRecommendationRequest,
+)
 from app.schemas.recommendation import RecommendationOut
+from app.models.audit_log import AuditLog
 
 router = APIRouter(tags=["recommendations"])
 
@@ -94,3 +100,71 @@ def run_idle_vm_rule(db: Session = Depends(get_db)):
 @router.get("/recommendations", response_model=list[RecommendationOut])
 def list_recommendations(db: Session = Depends(get_db)):
     return db.query(Recommendation).order_by(Recommendation.id.desc()).all()
+
+
+@router.post("/recommendations/{recommendation_id}/approve", response_model=RecommendationOut)
+def approve_recommendation(
+    recommendation_id: int,
+    payload: ApproveRecommendationRequest,
+    db: Session = Depends(get_db),
+):
+    recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
+    if not recommendation:
+        raise HTTPException(status_code=404, detail="recommendation not found")
+
+    if recommendation.status != "open":
+        raise HTTPException(status_code=400, detail="only open recommendations can be approved")
+
+    recommendation.status = "approved"
+    db.add(
+        AuditLog(
+            recommendation_id=recommendation.id,
+            action="approved",
+            actor=payload.actor,
+            notes=payload.notes,
+        )
+    )
+    db.commit()
+    db.refresh(recommendation)
+    return recommendation
+
+
+@router.post("/recommendations/{recommendation_id}/execute", response_model=RecommendationOut)
+def execute_recommendation(
+    recommendation_id: int,
+    payload: ExecuteRecommendationRequest,
+    db: Session = Depends(get_db),
+):
+    recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
+    if not recommendation:
+        raise HTTPException(status_code=404, detail="recommendation not found")
+
+    if recommendation.status != "approved":
+        raise HTTPException(status_code=400, detail="only approved recommendations can be executed")
+
+    recommendation.status = "executed"
+    db.add(
+        AuditLog(
+            recommendation_id=recommendation.id,
+            action="executed",
+            actor=payload.actor,
+            notes=payload.notes,
+        )
+    )
+    db.commit()
+    db.refresh(recommendation)
+    return recommendation
+
+
+@router.get("/recommendations/{recommendation_id}/audit-logs", response_model=list[AuditLogOut])
+def list_audit_logs(recommendation_id: int, db: Session = Depends(get_db)):
+    recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
+    if not recommendation:
+        raise HTTPException(status_code=404, detail="recommendation not found")
+
+    return (
+        db.query(AuditLog)
+        .filter(AuditLog.recommendation_id == recommendation_id)
+        .order_by(AuditLog.id.desc())
+        .all()
+    )
