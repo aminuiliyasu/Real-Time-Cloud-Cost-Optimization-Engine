@@ -4,6 +4,7 @@ from app.schemas.savings import SavingsSummaryOut
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from app.schemas.simulation import SimulationRequest, SimulationOut
 
 from app.db.session import get_db
 from app.models.recommendation import Recommendation
@@ -195,4 +196,42 @@ def savings_summary(db: Session = Depends(get_db)):
         executed_recommendations=int(executed_count),
         total_estimated_monthly_savings=float(total_estimated),
         realized_monthly_savings=float(realized),
+    )
+
+
+@router.post("/recommendations/{recommendation_id}/simulate", response_model=SimulationOut)
+def simulate_recommendation(
+    recommendation_id: int,
+    payload: SimulationRequest,
+    db: Session = Depends(get_db),
+):
+    recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
+    if not recommendation:
+        raise HTTPException(status_code=404, detail="recommendation not found")
+
+    # Baseline placeholder: derive current monthly cost from recommendation savings heuristic
+    # (replace with real billing model later)
+    current_monthly_cost = max(recommendation.estimated_monthly_savings * 4, 1.0)
+
+    projected_monthly_cost = current_monthly_cost * (1 - payload.reduction_percent / 100)
+    projected_monthly_savings = current_monthly_cost - projected_monthly_cost
+
+    # Simple risk heuristic:
+    # bigger reduction => higher risk
+    risk_score = min(payload.reduction_percent / 100, 0.95)
+    if risk_score < 0.30:
+        risk_level = "low"
+    elif risk_score < 0.60:
+        risk_level = "medium"
+    else:
+        risk_level = "high"
+
+    return SimulationOut(
+        recommendation_id=recommendation.id,
+        current_monthly_cost=round(current_monthly_cost, 2),
+        projected_monthly_cost=round(projected_monthly_cost, 2),
+        projected_monthly_savings=round(projected_monthly_savings, 2),
+        reduction_percent=payload.reduction_percent,
+        risk_score=round(risk_score, 2),
+        risk_level=risk_level,
     )
