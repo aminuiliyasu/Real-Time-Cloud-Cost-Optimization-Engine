@@ -9,6 +9,7 @@ from app.schemas.simulation import SimulationRequest, SimulationOut
 from app.db.session import get_db
 from app.models.recommendation import Recommendation
 from app.models.resource import Resource
+from app.models.simulation_run import SimulationRun
 from app.models.usage_metric import UsageMetric
 from app.schemas.audit_log import AuditLogOut
 from app.schemas.recommendation_actions import (
@@ -16,6 +17,7 @@ from app.schemas.recommendation_actions import (
     ExecuteRecommendationRequest,
 )
 from app.schemas.recommendation import RecommendationOut
+from app.schemas.simulation_run import SimulationRunOut
 from app.models.audit_log import AuditLog
 
 router = APIRouter(tags=["recommendations"])
@@ -226,6 +228,18 @@ def simulate_recommendation(
     else:
         risk_level = "high"
 
+    simulation = SimulationRun(
+        recommendation_id=recommendation.id,
+        reduction_percent=payload.reduction_percent,
+        current_monthly_cost=round(current_monthly_cost, 2),
+        projected_monthly_cost=round(projected_monthly_cost, 2),
+        projected_monthly_savings=round(projected_monthly_savings, 2),
+        risk_score=round(risk_score, 2),
+        risk_level=risk_level,
+    )
+    db.add(simulation)
+    db.commit()
+
     return SimulationOut(
         recommendation_id=recommendation.id,
         current_monthly_cost=round(current_monthly_cost, 2),
@@ -234,4 +248,18 @@ def simulate_recommendation(
         reduction_percent=payload.reduction_percent,
         risk_score=round(risk_score, 2),
         risk_level=risk_level,
+    )
+
+
+@router.get("/recommendations/{recommendation_id}/simulations", response_model=list[SimulationRunOut])
+def list_simulation_runs(recommendation_id: int, db: Session = Depends(get_db)):
+    recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
+    if not recommendation:
+        raise HTTPException(status_code=404, detail="recommendation not found")
+
+    return (
+        db.query(SimulationRun)
+        .filter(SimulationRun.recommendation_id == recommendation_id)
+        .order_by(SimulationRun.id.desc())
+        .all()
     )

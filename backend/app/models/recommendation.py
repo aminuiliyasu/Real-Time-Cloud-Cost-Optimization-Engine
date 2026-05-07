@@ -20,4 +20,4 @@ class Recommendation(Base):
 
     resource = relationship("Resource", back_populates="recommendations")
     audit_logs = relationship("AuditLog", back_populates="recommendation", cascade="all, delete-orphan")
-    audit_logs = relationship("AuditLog", back_populates="recommendation", cascade="all, delete-orphan")
+    simulations = relationship("SimulationRun", back_populates="recommendation", cascade="all, delete-orphan")
