@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import random
-
+from app.schemas.savings import SavingsSummaryOut
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -167,4 +167,32 @@ def list_audit_logs(recommendation_id: int, db: Session = Depends(get_db)):
         .filter(AuditLog.recommendation_id == recommendation_id)
         .order_by(AuditLog.id.desc())
         .all()
+    )
+
+
+
+@router.get("/savings/summary", response_model=SavingsSummaryOut)
+def savings_summary(db: Session = Depends(get_db)):
+    total = db.query(func.count(Recommendation.id)).scalar() or 0
+    open_count = db.query(func.count(Recommendation.id)).filter(Recommendation.status == "open").scalar() or 0
+    approved_count = db.query(func.count(Recommendation.id)).filter(Recommendation.status == "approved").scalar() or 0
+    executed_count = db.query(func.count(Recommendation.id)).filter(Recommendation.status == "executed").scalar() or 0
+
+    total_estimated = (
+        db.query(func.coalesce(func.sum(Recommendation.estimated_monthly_savings), 0.0)).scalar() or 0.0
+    )
+    realized = (
+        db.query(func.coalesce(func.sum(Recommendation.estimated_monthly_savings), 0.0))
+        .filter(Recommendation.status == "executed")
+        .scalar()
+        or 0.0
+    )
+
+    return SavingsSummaryOut(
+        total_recommendations=int(total),
+        open_recommendations=int(open_count),
+        approved_recommendations=int(approved_count),
+        executed_recommendations=int(executed_count),
+        total_estimated_monthly_savings=float(total_estimated),
+        realized_monthly_savings=float(realized),
     )
