@@ -1,6 +1,12 @@
 from sqlalchemy import Column, DateTime, Integer, String, func
+from sqlalchemy.orm import relationship
 
 from app.db.base import Base
+
+
+
+usage_metrics = relationship("UsageMetric", back_populates="resource", cascade="all, delete-orphan")
+recommendations = relationship("Recommendation", back_populates="resource", cascade="all, delete-orphan")
 
 
 class Resource(Base):
