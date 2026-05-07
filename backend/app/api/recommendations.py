@@ -23,6 +23,18 @@ from app.models.audit_log import AuditLog
 router = APIRouter(tags=["recommendations"])
 
 
+def compute_metric_based_baseline(avg_cpu: float, avg_mem: float | None) -> float:
+    """
+    Simple cost heuristic:
+    - base floor cost = 40
+    - cpu contributes up to 60
+    - memory contributes up to 40 (if present)
+    """
+    cpu_component = min(max(avg_cpu, 0.0), 100.0) * 0.6
+    mem_component = (min(max(avg_mem or 0.0, 0.0), 100.0) * 0.4) if avg_mem is not None else 10.0
+    return round(40.0 + cpu_component + mem_component, 2)
+
+
 @router.post("/usage-metrics/mock/{resource_id}")
 def seed_mock_metrics(resource_id: int, db: Session = Depends(get_db)):
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
@@ -211,16 +223,36 @@ def simulate_recommendation(
     if not recommendation:
         raise HTTPException(status_code=404, detail="recommendation not found")
 
-    # Baseline placeholder: derive current monthly cost from recommendation savings heuristic
-    # (replace with real billing model later)
-    current_monthly_cost = max(recommendation.estimated_monthly_savings * 4, 1.0)
+    avg_cpu = (
+        db.query(func.avg(UsageMetric.cpu_utilization))
+        .filter(UsageMetric.resource_id == recommendation.resource_id)
+        .scalar()
+    )
+    avg_mem = (
+        db.query(func.avg(UsageMetric.memory_utilization))
+        .filter(UsageMetric.resource_id == recommendation.resource_id)
+        .scalar()
+    )
+
+    if avg_cpu is None:
+        current_monthly_cost = max(recommendation.estimated_monthly_savings * 4, 1.0)
+    else:
+        current_monthly_cost = compute_metric_based_baseline(
+            float(avg_cpu),
+            float(avg_mem) if avg_mem is not None else None,
+        )
 
     projected_monthly_cost = current_monthly_cost * (1 - payload.reduction_percent / 100)
     projected_monthly_savings = current_monthly_cost - projected_monthly_cost
 
-    # Simple risk heuristic:
-    # bigger reduction => higher risk
-    risk_score = min(payload.reduction_percent / 100, 0.95)
+    base_risk = payload.reduction_percent / 100.0
+    utilization_pressure = 0.0
+    if avg_cpu is not None:
+        utilization_pressure += min(float(avg_cpu) / 100.0, 1.0) * 0.5
+    if avg_mem is not None:
+        utilization_pressure += min(float(avg_mem) / 100.0, 1.0) * 0.3
+
+    risk_score = min(base_risk + utilization_pressure, 0.95)
     if risk_score < 0.30:
         risk_level = "low"
     elif risk_score < 0.60:
