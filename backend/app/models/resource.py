@@ -4,11 +4,6 @@ from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
-
-usage_metrics = relationship("UsageMetric", back_populates="resource", cascade="all, delete-orphan")
-recommendations = relationship("Recommendation", back_populates="resource", cascade="all, delete-orphan")
-
-
 class Resource(Base):
     __tablename__ = "resources"
 
@@ -20,3 +15,5 @@ class Resource(Base):
     account_id = Column(String(100), nullable=True)
     tags = Column(String, nullable=True)  # JSON string for now
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    usage_metrics = relationship("UsageMetric", back_populates="resource", cascade="all, delete-orphan")
+    recommendations = relationship("Recommendation", back_populates="resource", cascade="all, delete-orphan")
