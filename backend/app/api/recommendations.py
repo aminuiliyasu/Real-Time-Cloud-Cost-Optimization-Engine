@@ -35,6 +35,20 @@ def compute_metric_based_baseline(avg_cpu: float, avg_mem: float | None) -> floa
     return round(40.0 + cpu_component + mem_component, 2)
 
 
+def compute_trend_percent(current_avg: float | None, previous_avg: float | None) -> tuple[str, float]:
+    if current_avg is None or previous_avg is None or previous_avg == 0:
+        return "insufficient_data", 0.0
+
+    change = ((current_avg - previous_avg) / previous_avg) * 100
+    if change > 5:
+        direction = "up"
+    elif change < -5:
+        direction = "down"
+    else:
+        direction = "flat"
+    return direction, round(change, 2)
+
+
 @router.post("/usage-metrics/mock/{resource_id}")
 def seed_mock_metrics(resource_id: int, db: Session = Depends(get_db)):
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
@@ -233,6 +247,32 @@ def simulate_recommendation(
         .filter(UsageMetric.resource_id == recommendation.resource_id)
         .scalar()
     )
+    now = datetime.now(timezone.utc)
+    current_window_start = now - timedelta(hours=24)
+    previous_window_start = now - timedelta(hours=48)
+
+    current_avg_cpu = (
+        db.query(func.avg(UsageMetric.cpu_utilization))
+        .filter(
+            UsageMetric.resource_id == recommendation.resource_id,
+            UsageMetric.recorded_at >= current_window_start,
+            UsageMetric.recorded_at <= now,
+        )
+        .scalar()
+    )
+    previous_avg_cpu = (
+        db.query(func.avg(UsageMetric.cpu_utilization))
+        .filter(
+            UsageMetric.resource_id == recommendation.resource_id,
+            UsageMetric.recorded_at >= previous_window_start,
+            UsageMetric.recorded_at < current_window_start,
+        )
+        .scalar()
+    )
+    trend_direction, trend_percent = compute_trend_percent(
+        float(current_avg_cpu) if current_avg_cpu is not None else None,
+        float(previous_avg_cpu) if previous_avg_cpu is not None else None,
+    )
 
     if avg_cpu is None:
         current_monthly_cost = max(recommendation.estimated_monthly_savings * 4, 1.0)
@@ -253,6 +293,11 @@ def simulate_recommendation(
         utilization_pressure += min(float(avg_mem) / 100.0, 1.0) * 0.3
 
     risk_score = min(base_risk + utilization_pressure, 0.95)
+    if trend_direction == "up" and trend_percent > 10:
+        risk_score = min(risk_score + 0.1, 0.95)
+    elif trend_direction == "down" and trend_percent < -10:
+        risk_score = max(risk_score - 0.05, 0.0)
+
     if risk_score < 0.30:
         risk_level = "low"
     elif risk_score < 0.60:
@@ -280,6 +325,8 @@ def simulate_recommendation(
         reduction_percent=payload.reduction_percent,
         risk_score=round(risk_score, 2),
         risk_level=risk_level,
+        trend_direction=trend_direction,
+        trend_percent=trend_percent,
     )
 
 

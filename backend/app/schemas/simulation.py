@@ -13,3 +13,5 @@ class SimulationOut(BaseModel):
     reduction_percent: float
     risk_score: float
     risk_level: str
+    trend_direction: str
+    trend_percent: float
