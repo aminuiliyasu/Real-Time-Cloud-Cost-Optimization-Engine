@@ -216,7 +216,21 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5) Run Dashboard (Static)
+### 5) Run Worker Scheduler
+
+```bash
+cd backend
+python -m app.workers.scheduler --run-once --hours 24
+```
+
+Use loop mode for periodic execution:
+
+```bash
+cd backend
+python -m app.workers.scheduler --hours 24 --interval-seconds 900
+```
+
+### 6) Run Dashboard (Static)
 
 ```bash
 cd dashboard/src
