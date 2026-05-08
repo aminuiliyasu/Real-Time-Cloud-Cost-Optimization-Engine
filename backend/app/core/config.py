@@ -9,6 +9,7 @@ BASE_DIR = Path(__file__).resolve().parents[3]
 class Settings(BaseSettings):
     app_env: str = "development"
     api_port: int = 8000
+    api_key: str = "change_me_strong_key"
     postgres_url: str
     redis_url: str
 

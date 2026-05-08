@@ -20,6 +20,7 @@ from app.schemas.recommendation import RecommendationOut
 from app.schemas.simulation_run import SimulationRunOut
 from app.models.audit_log import AuditLog
 from app.core.config import settings
+from app.core.auth import require_roles
 
 router = APIRouter(tags=["recommendations"])
 
@@ -56,7 +57,11 @@ def ensure_dev_mode() -> None:
 
 
 @router.post("/dev/usage-metrics/mock/{resource_id}")
-def seed_mock_metrics(resource_id: int, db: Session = Depends(get_db)):
+def seed_mock_metrics(
+    resource_id: int,
+    _authz: None = Depends(require_roles(["admin"])),
+    db: Session = Depends(get_db),
+):
     ensure_dev_mode()
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
@@ -83,7 +88,11 @@ def seed_mock_metrics(resource_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/dev/usage-metrics/backfill/{resource_id}")
-def backfill_metrics(resource_id: int, db: Session = Depends(get_db)):
+def backfill_metrics(
+    resource_id: int,
+    _authz: None = Depends(require_roles(["admin"])),
+    db: Session = Depends(get_db),
+):
     ensure_dev_mode()
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
@@ -150,7 +159,10 @@ def metrics_range(resource_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/dev/recommendations/run-idle-vm-rule")
-def run_idle_vm_rule(db: Session = Depends(get_db)):
+def run_idle_vm_rule(
+    _authz: None = Depends(require_roles(["admin"])),
+    db: Session = Depends(get_db),
+):
     ensure_dev_mode()
     cpu_threshold = 5.0
     min_samples = 6
@@ -210,6 +222,7 @@ def list_recommendations(db: Session = Depends(get_db)):
 def approve_recommendation(
     recommendation_id: int,
     payload: ApproveRecommendationRequest,
+    _authz: None = Depends(require_roles(["operator", "admin"])),
     db: Session = Depends(get_db),
 ):
     recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
@@ -237,6 +250,7 @@ def approve_recommendation(
 def execute_recommendation(
     recommendation_id: int,
     payload: ExecuteRecommendationRequest,
+    _authz: None = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
 ):
     recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
