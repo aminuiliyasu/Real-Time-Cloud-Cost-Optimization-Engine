@@ -32,6 +32,28 @@
           <span><i class="dot memory"></i> Memory %</span>
         </div>
       </section>
+
+      <section class="table-card">
+        <h2>Recommendations</h2>
+        <div class="auth-row">
+          <input id="api-key" type="text" value="change_me_strong_key" placeholder="API Key" />
+          <input id="actor" type="text" value="aminu" placeholder="Actor" />
+          <button id="reload-recommendations">Reload Recommendations</button>
+        </div>
+        <p id="actions-note" class="muted"></p>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Rule</th>
+              <th>Status</th>
+              <th>Savings</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="recommendations-body"></tbody>
+        </table>
+      </section>
     </main>
     <script type="module" src="./app.js"></script>
   </body>

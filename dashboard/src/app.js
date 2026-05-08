@@ -5,6 +5,11 @@ const hoursNode = document.getElementById("hours");
 const refreshNode = document.getElementById("refresh");
 const chartNode = document.getElementById("trend-chart");
 const chartNoteNode = document.getElementById("chart-note");
+const recommendationsBodyNode = document.getElementById("recommendations-body");
+const apiKeyNode = document.getElementById("api-key");
+const actorNode = document.getElementById("actor");
+const actionsNoteNode = document.getElementById("actions-note");
+const reloadRecommendationsNode = document.getElementById("reload-recommendations");
 
 function fmtMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -65,6 +70,57 @@ function renderChart(points) {
     : "No trend points available yet.";
 }
 
+function renderRecommendations(recommendations) {
+  recommendationsBodyNode.innerHTML = recommendations
+    .map((rec) => {
+      const canApprove = rec.status === "open";
+      const canExecute = rec.status === "approved";
+      return `
+      <tr>
+        <td>${rec.id}</td>
+        <td>${rec.rule_name}</td>
+        <td><span class="badge ${rec.status}">${rec.status}</span></td>
+        <td>${fmtMoney(rec.estimated_monthly_savings)}</td>
+        <td>
+          <button data-action="approve" data-id="${rec.id}" ${canApprove ? "" : "disabled"}>Approve</button>
+          <button data-action="execute" data-id="${rec.id}" ${canExecute ? "" : "disabled"}>Execute</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+async function loadRecommendations() {
+  const res = await fetch(`${API_BASE}/recommendations`);
+  if (!res.ok) {
+    throw new Error("Failed to load recommendations");
+  }
+  const recommendations = await res.json();
+  renderRecommendations(recommendations);
+}
+
+async function mutateRecommendation(id, action) {
+  const apiKey = apiKeyNode.value.trim();
+  const actor = actorNode.value.trim() || "dashboard-user";
+  const role = action === "approve" ? "operator" : "admin";
+  const notes =
+    action === "approve" ? "approved from dashboard ui" : "executed from dashboard ui";
+  const res = await fetch(`${API_BASE}/recommendations/${id}/${action}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey,
+      "X-Role": role,
+    },
+    body: JSON.stringify({ actor, notes }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = payload.detail || `Failed to ${action} recommendation ${id}`;
+    throw new Error(String(message));
+  }
+}
+
 async function loadDashboard() {
   const hours = Number(hoursNode.value || 24);
   const [kpisRes, trendsRes] = await Promise.all([
@@ -80,12 +136,35 @@ async function loadDashboard() {
   const trends = await trendsRes.json();
   renderKpis(kpis);
   renderChart(trends.points || []);
+  await loadRecommendations();
 }
 
 refreshNode.addEventListener("click", () => {
   loadDashboard().catch((err) => {
     chartNoteNode.textContent = err.message;
   });
+});
+
+reloadRecommendationsNode.addEventListener("click", () => {
+  loadRecommendations().catch((err) => {
+    actionsNoteNode.textContent = err.message;
+  });
+});
+
+recommendationsBodyNode.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const id = button.getAttribute("data-id");
+  const action = button.getAttribute("data-action");
+  if (!id || !action) return;
+  actionsNoteNode.textContent = "Applying action...";
+  try {
+    await mutateRecommendation(id, action);
+    actionsNoteNode.textContent = `Recommendation ${id} ${action}d successfully.`;
+    await loadDashboard();
+  } catch (err) {
+    actionsNoteNode.textContent = err.message;
+  }
 });
 
 loadDashboard().catch((err) => {
