@@ -3,6 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.schemas.contracts import (
+    IngestionEcsMetricsOut,
+    IngestionEcsResourcesOut,
+    IngestionMetricsOut,
+    IngestionResourcesOut,
+)
 from app.services.ingestion.aws_ingestion import (
     ingest_aws_ecs_metrics,
     ingest_aws_ecs_resources,
@@ -13,7 +19,7 @@ from app.services.ingestion.aws_ingestion import (
 router = APIRouter(prefix="/dev/ingest/aws", tags=["ingestion"])
 
 
-@router.post("/resources")
+@router.post("/resources", response_model=IngestionResourcesOut)
 def ingest_resources(
     _authz: None = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
@@ -25,7 +31,7 @@ def ingest_resources(
         raise HTTPException(status_code=500, detail=f"aws resource ingestion failed: {exc}")
 
 
-@router.post("/metrics")
+@router.post("/metrics", response_model=IngestionMetricsOut)
 def ingest_metrics(
     hours: int = 24,
     _authz: None = Depends(require_roles(["admin"])),
@@ -41,7 +47,7 @@ def ingest_metrics(
         raise HTTPException(status_code=500, detail=f"aws metric ingestion failed: {exc}")
 
 
-@router.post("/ecs/resources")
+@router.post("/ecs/resources", response_model=IngestionEcsResourcesOut)
 def ingest_ecs_resources(
     _authz: None = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
@@ -53,7 +59,7 @@ def ingest_ecs_resources(
         raise HTTPException(status_code=500, detail=f"aws ecs resource ingestion failed: {exc}")
 
 
-@router.post("/ecs/metrics")
+@router.post("/ecs/metrics", response_model=IngestionEcsMetricsOut)
 def ingest_ecs_metrics(
     hours: int = 24,
     _authz: None = Depends(require_roles(["admin"])),

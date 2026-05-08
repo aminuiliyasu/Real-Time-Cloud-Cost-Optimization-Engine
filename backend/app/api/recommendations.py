@@ -18,6 +18,12 @@ from app.schemas.recommendation import RecommendationOut
 from app.schemas.simulation_run import SimulationRunOut
 from app.core.config import settings
 from app.core.auth import require_roles
+from app.schemas.contracts import (
+    EcsUnderutilizedRuleRunOut,
+    IdleVmRuleRunOut,
+    UsageMetricsRangeOut,
+    UsageMetricsWriteOut,
+)
 from app.services.rules.idle_vm import run_idle_vm_rule as run_idle_vm_rule_service
 from app.services.rules.ecs_underutilized import (
     run_ecs_underutilized_rule as run_ecs_underutilized_rule_service,
@@ -41,7 +47,7 @@ def ensure_dev_mode() -> None:
         raise HTTPException(status_code=403, detail="dev endpoint disabled outside development")
 
 
-@router.post("/dev/usage-metrics/mock/{resource_id}")
+@router.post("/dev/usage-metrics/mock/{resource_id}", response_model=UsageMetricsWriteOut)
 def seed_mock_metrics(
     resource_id: int,
     _authz: None = Depends(require_roles(["admin"])),
@@ -72,7 +78,7 @@ def seed_mock_metrics(
     return {"inserted": len(rows), "resource_id": resource_id}
 
 
-@router.post("/dev/usage-metrics/backfill/{resource_id}")
+@router.post("/dev/usage-metrics/backfill/{resource_id}", response_model=UsageMetricsWriteOut)
 def backfill_metrics(
     resource_id: int,
     _authz: None = Depends(require_roles(["admin"])),
@@ -113,12 +119,12 @@ def backfill_metrics(
     return {"inserted": len(rows), "resource_id": resource_id}
 
 
-@router.get("/usage-metrics/range/{resource_id}")
+@router.get("/usage-metrics/range/{resource_id}", response_model=UsageMetricsRangeOut)
 def metrics_range(resource_id: int, db: Session = Depends(get_db)):
     return get_metrics_range(db, resource_id)
 
 
-@router.post("/dev/recommendations/run-idle-vm-rule")
+@router.post("/dev/recommendations/run-idle-vm-rule", response_model=IdleVmRuleRunOut)
 def run_idle_vm_rule(
     _authz: None = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
@@ -127,7 +133,10 @@ def run_idle_vm_rule(
     return run_idle_vm_rule_service(db)
 
 
-@router.post("/dev/recommendations/run-ecs-underutilized-rule")
+@router.post(
+    "/dev/recommendations/run-ecs-underutilized-rule",
+    response_model=EcsUnderutilizedRuleRunOut,
+)
 def run_ecs_underutilized_rule(
     _authz: None = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
