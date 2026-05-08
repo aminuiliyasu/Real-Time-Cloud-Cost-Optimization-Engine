@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_port: int = 8000
     api_key: str = "change_me_strong_key"
+    aws_region: str = "us-east-1"
+    aws_profile: str = "default"
     postgres_url: str
     redis_url: str
 

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 import redis
+from app.api.ingestion import router as ingestion_router
 from app.api.resources import router as resources_router
 from app.api.recommendations import router as recommendations_router
 
@@ -9,6 +10,7 @@ from app.db.session import check_db_connection
 app = FastAPI(title="Real-Time Cloud Cost Optimization Engine API")
 app.include_router(resources_router)
 app.include_router(recommendations_router)
+app.include_router(ingestion_router)
 
 
 @app.get("/health")
