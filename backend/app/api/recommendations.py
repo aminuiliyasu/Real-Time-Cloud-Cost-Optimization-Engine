@@ -75,6 +75,72 @@ def seed_mock_metrics(resource_id: int, db: Session = Depends(get_db)):
     return {"inserted": len(rows), "resource_id": resource_id}
 
 
+@router.post("/usage-metrics/backfill/{resource_id}")
+def backfill_metrics(resource_id: int, db: Session = Depends(get_db)):
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        raise HTTPException(status_code=404, detail="resource not found")
+
+    now = datetime.now(timezone.utc)
+    rows = []
+    # 72 hourly samples: enough for current 24h + previous 24h windows
+    for i in range(72):
+        recorded_at = now - timedelta(hours=i)
+
+        # synthetic trend: older half lower load, recent half higher load
+        if i >= 36:
+            cpu = round(random.uniform(2.0, 6.0), 2)
+            mem = round(random.uniform(20.0, 35.0), 2)
+        else:
+            cpu = round(random.uniform(6.0, 14.0), 2)
+            mem = round(random.uniform(30.0, 50.0), 2)
+
+        rows.append(
+            UsageMetric(
+                resource_id=resource_id,
+                cpu_utilization=cpu,
+                memory_utilization=mem,
+                network_in_mb=round(random.uniform(2.0, 15.0), 2),
+                network_out_mb=round(random.uniform(2.0, 12.0), 2),
+                recorded_at=recorded_at,
+            )
+        )
+
+    db.add_all(rows)
+    db.commit()
+    return {"inserted": len(rows), "resource_id": resource_id}
+
+
+@router.get("/usage-metrics/range/{resource_id}")
+def metrics_range(resource_id: int, db: Session = Depends(get_db)):
+    resource = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not resource:
+        raise HTTPException(status_code=404, detail="resource not found")
+
+    min_ts = (
+        db.query(func.min(UsageMetric.recorded_at))
+        .filter(UsageMetric.resource_id == resource_id)
+        .scalar()
+    )
+    max_ts = (
+        db.query(func.max(UsageMetric.recorded_at))
+        .filter(UsageMetric.resource_id == resource_id)
+        .scalar()
+    )
+    count = (
+        db.query(func.count(UsageMetric.id))
+        .filter(UsageMetric.resource_id == resource_id)
+        .scalar()
+    )
+
+    return {
+        "resource_id": resource_id,
+        "count": int(count or 0),
+        "min_recorded_at": min_ts,
+        "max_recorded_at": max_ts,
+    }
+
+
 @router.post("/recommendations/run-idle-vm-rule")
 def run_idle_vm_rule(db: Session = Depends(get_db)):
     cpu_threshold = 5.0
