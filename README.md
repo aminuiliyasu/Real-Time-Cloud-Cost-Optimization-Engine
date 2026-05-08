@@ -138,15 +138,29 @@ An application runs 24/7 but receives low traffic overnight.
 5. **API + Dashboard Layer**
   Exposes recommendations, actions, and savings metrics.
 
-## API Surface
+## API Reference
 
-- `GET /health` - service health and dependency checks
-- `GET /recommendations` - list active and historical optimization recommendations
-- `POST /recommendations/{id}/simulate` - run what-if simulation for a recommendation
-- `POST /recommendations/{id}/approve` - approve optimization action
-- `POST /actions/{id}/execute` - execute approved action
-- `GET /savings/summary` - estimated vs realized savings by period and account
-- `GET /policies` / `PUT /policies/{id}` - policy and automation rule management
+### Core Operations
+
+- `GET /health` - service health check
+- `GET /resources` - list ingested resources
+- `GET /recommendations` - list optimization recommendations
+- `POST /recommendations/{id}/simulate` - run what-if simulation
+- `POST /recommendations/{id}/approve` - approve a recommendation (`operator` or `admin`)
+- `POST /recommendations/{id}/execute` - execute an approved recommendation (`admin`)
+- `GET /recommendations/{id}/audit-logs` - audit trail for approval/execution actions
+- `GET /savings/summary` - total estimated and realized monthly savings
+
+### AWS ECS Ingestion + Rule Endpoints (Dev/Admin)
+
+- `POST /dev/ingest/aws/ecs/resources` - ingest ECS services from configured AWS account/region
+- `POST /dev/ingest/aws/ecs/metrics?hours=24` - ingest ECS CloudWatch utilization metrics
+- `POST /dev/recommendations/run-ecs-underutilized-rule` - create ECS underutilization recommendations
+
+### Dashboard Endpoints
+
+- `GET /dashboard/kpis` - KPI snapshot for cards
+- `GET /dashboard/trends?hours=24` - hourly utilization trend points for charts
 
 ## Repository Structure
 
@@ -180,15 +194,12 @@ cd Real-Time-Cloud-Cost-Optimization-Engine
 ```env
 APP_ENV=development
 API_PORT=8000
-POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/cost_optimizer
-REDIS_URL=redis://localhost:6379/0
-
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=replace_me
-AWS_SECRET_ACCESS_KEY=replace_me
-
-GCP_PROJECT_ID=replace_me
-GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/gcp-service-account.json
+POSTGRES_URL=postgresql://postgres:postgres@localhost:55432/cost_optimizer
+REDIS_URL=redis://localhost:56379/0
+POSTGRES_PASSWORD=change_me
+API_KEY=change_me_strong_key
+AWS_REGION=eu-central-1
+AWS_PROFILE=default
 ```
 
 ### 3) Start Dependencies
@@ -205,20 +216,71 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5) Run Worker
+### 5) Run Dashboard (Static)
 
 ```bash
-cd backend
-python -m workers.scheduler
+cd dashboard/src
+python3 -m http.server 5500
 ```
 
-### 6) Run Dashboard
+Open `http://127.0.0.1:5500` for the dashboard UI.
+
+## End-to-End Demo Runbook
+
+Use these commands in order to demonstrate the full pipeline.
+
+### 1) Ingest ECS resources and metrics
 
 ```bash
-cd dashboard
-npm install
-npm run dev
+curl -X POST "http://127.0.0.1:8000/dev/ingest/aws/ecs/resources" \
+  -H "X-API-Key: change_me_strong_key" \
+  -H "X-Role: admin"
+
+curl -X POST "http://127.0.0.1:8000/dev/ingest/aws/ecs/metrics?hours=24" \
+  -H "X-API-Key: change_me_strong_key" \
+  -H "X-Role: admin"
 ```
+
+### 2) Run optimization rule
+
+```bash
+curl -X POST "http://127.0.0.1:8000/dev/recommendations/run-ecs-underutilized-rule" \
+  -H "X-API-Key: change_me_strong_key" \
+  -H "X-Role: admin"
+```
+
+### 3) Review recommendations
+
+```bash
+curl "http://127.0.0.1:8000/recommendations"
+```
+
+### 4) Approve and execute (replace `2` with your open recommendation id)
+
+```bash
+curl -X POST "http://127.0.0.1:8000/recommendations/2/approve" \
+  -H "X-API-Key: change_me_strong_key" \
+  -H "X-Role: operator" \
+  -H "Content-Type: application/json" \
+  -d '{"actor":"aminu","notes":"approved from runbook"}'
+
+curl -X POST "http://127.0.0.1:8000/recommendations/2/execute" \
+  -H "X-API-Key: change_me_strong_key" \
+  -H "X-Role: admin" \
+  -H "Content-Type: application/json" \
+  -d '{"actor":"aminu","notes":"executed from runbook"}'
+```
+
+### 5) Verify outcomes
+
+```bash
+curl "http://127.0.0.1:8000/recommendations/2/audit-logs"
+curl "http://127.0.0.1:8000/savings/summary"
+curl "http://127.0.0.1:8000/dashboard/kpis"
+curl "http://127.0.0.1:8000/dashboard/trends?hours=24"
+```
+
+Expected result: recommendations move from `open -> approved -> executed`, audit logs are recorded, and realized savings are reflected in summary/KPI endpoints.
 
 ## CI/CD Pipeline
 
