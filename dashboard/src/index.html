@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloud Cost Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <h1>Real-Time Cloud Cost Dashboard</h1>
+        <div class="controls">
+          <label for="hours">Trend Window:</label>
+          <select id="hours">
+            <option value="24" selected>24h</option>
+            <option value="48">48h</option>
+            <option value="72">72h</option>
+          </select>
+          <button id="refresh">Refresh</button>
+        </div>
+      </header>
+
+      <section id="kpis" class="kpi-grid"></section>
+
+      <section class="chart-card">
+        <h2>CPU and Memory Trends</h2>
+        <p id="chart-note" class="muted"></p>
+        <svg id="trend-chart" viewBox="0 0 1000 320" preserveAspectRatio="none" aria-label="Trend chart"></svg>
+        <div class="legend">
+          <span><i class="dot cpu"></i> CPU %</span>
+          <span><i class="dot memory"></i> Memory %</span>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
