@@ -296,6 +296,27 @@ curl "http://127.0.0.1:8000/dashboard/trends?hours=24"
 
 Expected result: recommendations move from `open -> approved -> executed`, audit logs are recorded, and realized savings are reflected in summary/KPI endpoints.
 
+## Test Commands
+
+Run tests from project root:
+
+```bash
+source backend/.venv/bin/activate
+pytest -q
+```
+
+Optional focused runs:
+
+```bash
+pytest -q tests/test_services_unit.py
+pytest -q tests/test_api_integration.py
+```
+
+## Additional Documentation
+
+- [Architecture Overview](docs/architecture.md)
+- [5-Minute Demo Script](docs/demo-script.md)
+
 ## CI/CD Pipeline
 
 GitHub Actions pipeline stages:
