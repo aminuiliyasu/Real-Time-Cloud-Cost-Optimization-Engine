@@ -19,6 +19,7 @@ from app.schemas.recommendation_actions import (
 from app.schemas.recommendation import RecommendationOut
 from app.schemas.simulation_run import SimulationRunOut
 from app.models.audit_log import AuditLog
+from app.core.config import settings
 
 router = APIRouter(tags=["recommendations"])
 
@@ -49,8 +50,14 @@ def compute_trend_percent(current_avg: float | None, previous_avg: float | None)
     return direction, round(change, 2)
 
 
-@router.post("/usage-metrics/mock/{resource_id}")
+def ensure_dev_mode() -> None:
+    if settings.app_env.lower() != "development":
+        raise HTTPException(status_code=403, detail="dev endpoint disabled outside development")
+
+
+@router.post("/dev/usage-metrics/mock/{resource_id}")
 def seed_mock_metrics(resource_id: int, db: Session = Depends(get_db)):
+    ensure_dev_mode()
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
         raise HTTPException(status_code=404, detail="resource not found")
@@ -75,8 +82,9 @@ def seed_mock_metrics(resource_id: int, db: Session = Depends(get_db)):
     return {"inserted": len(rows), "resource_id": resource_id}
 
 
-@router.post("/usage-metrics/backfill/{resource_id}")
+@router.post("/dev/usage-metrics/backfill/{resource_id}")
 def backfill_metrics(resource_id: int, db: Session = Depends(get_db)):
+    ensure_dev_mode()
     resource = db.query(Resource).filter(Resource.id == resource_id).first()
     if not resource:
         raise HTTPException(status_code=404, detail="resource not found")
@@ -141,8 +149,9 @@ def metrics_range(resource_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/recommendations/run-idle-vm-rule")
+@router.post("/dev/recommendations/run-idle-vm-rule")
 def run_idle_vm_rule(db: Session = Depends(get_db)):
+    ensure_dev_mode()
     cpu_threshold = 5.0
     min_samples = 6
     created = 0
