@@ -21,35 +21,13 @@ from app.schemas.simulation_run import SimulationRunOut
 from app.models.audit_log import AuditLog
 from app.core.config import settings
 from app.core.auth import require_roles
+from app.services.rules.idle_vm import run_idle_vm_rule as run_idle_vm_rule_service
+from app.services.rules.ecs_underutilized import (
+    run_ecs_underutilized_rule as run_ecs_underutilized_rule_service,
+)
+from app.services.simulations.engine import run_recommendation_simulation
 
 router = APIRouter(tags=["recommendations"])
-
-
-def compute_metric_based_baseline(avg_cpu: float, avg_mem: float | None) -> float:
-    """
-    Simple cost heuristic:
-    - base floor cost = 40
-    - cpu contributes up to 60
-    - memory contributes up to 40 (if present)
-    """
-    cpu_component = min(max(avg_cpu, 0.0), 100.0) * 0.6
-    mem_component = (min(max(avg_mem or 0.0, 0.0), 100.0) * 0.4) if avg_mem is not None else 10.0
-    return round(40.0 + cpu_component + mem_component, 2)
-
-
-def compute_trend_percent(current_avg: float | None, previous_avg: float | None) -> tuple[str, float]:
-    if current_avg is None or previous_avg is None or previous_avg == 0:
-        return "insufficient_data", 0.0
-
-    change = ((current_avg - previous_avg) / previous_avg) * 100
-    if change > 5:
-        direction = "up"
-    elif change < -5:
-        direction = "down"
-    else:
-        direction = "flat"
-    return direction, round(change, 2)
-
 
 def ensure_dev_mode() -> None:
     if settings.app_env.lower() != "development":
@@ -164,53 +142,7 @@ def run_idle_vm_rule(
     db: Session = Depends(get_db),
 ):
     ensure_dev_mode()
-    cpu_threshold = 5.0
-    min_samples = 6
-    created = 0
-
-    resources = db.query(Resource).all()
-    for resource in resources:
-        avg_cpu = (
-            db.query(func.avg(UsageMetric.cpu_utilization))
-            .filter(UsageMetric.resource_id == resource.id)
-            .scalar()
-        )
-        sample_count = (
-            db.query(func.count(UsageMetric.id))
-            .filter(UsageMetric.resource_id == resource.id)
-            .scalar()
-        )
-
-        if avg_cpu is None or sample_count < min_samples:
-            continue
-
-        if float(avg_cpu) < cpu_threshold:
-            exists = (
-                db.query(Recommendation)
-                .filter(
-                    Recommendation.resource_id == resource.id,
-                    Recommendation.rule_name == "idle_vm",
-                    Recommendation.status == "open",
-                )
-                .first()
-            )
-            if exists:
-                continue
-
-            rec = Recommendation(
-                resource_id=resource.id,
-                rule_name="idle_vm",
-                severity="medium",
-                estimated_monthly_savings=25.0,
-                confidence_score=0.82,
-                action="downsize_instance",
-                status="open",
-            )
-            db.add(rec)
-            created += 1
-
-    db.commit()
-    return {"created_recommendations": created}
+    return run_idle_vm_rule_service(db)
 
 
 @router.post("/dev/recommendations/run-ecs-underutilized-rule")
@@ -219,98 +151,7 @@ def run_ecs_underutilized_rule(
     db: Session = Depends(get_db),
 ):
     ensure_dev_mode()
-    cpu_threshold = 20.0
-    memory_threshold = 30.0
-    min_samples = 6
-    window_start = datetime.now(timezone.utc) - timedelta(hours=24)
-
-    scanned_services = 0
-    created_recommendations = 0
-    skipped_existing = 0
-
-    ecs_resources = (
-        db.query(Resource)
-        .filter(
-            Resource.cloud_provider == "aws",
-            Resource.resource_type == "ecs_service",
-        )
-        .all()
-    )
-
-    for resource in ecs_resources:
-        scanned_services += 1
-        avg_cpu = (
-            db.query(func.avg(UsageMetric.cpu_utilization))
-            .filter(
-                UsageMetric.resource_id == resource.id,
-                UsageMetric.recorded_at >= window_start,
-            )
-            .scalar()
-        )
-        avg_mem = (
-            db.query(func.avg(UsageMetric.memory_utilization))
-            .filter(
-                UsageMetric.resource_id == resource.id,
-                UsageMetric.recorded_at >= window_start,
-            )
-            .scalar()
-        )
-        sample_count = (
-            db.query(func.count(UsageMetric.id))
-            .filter(
-                UsageMetric.resource_id == resource.id,
-                UsageMetric.recorded_at >= window_start,
-            )
-            .scalar()
-        )
-
-        if avg_cpu is None or avg_mem is None or sample_count < min_samples:
-            continue
-
-        if float(avg_cpu) < cpu_threshold and float(avg_mem) < memory_threshold:
-            exists = (
-                db.query(Recommendation)
-                .filter(
-                    Recommendation.resource_id == resource.id,
-                    Recommendation.rule_name == "ecs_underutilized_service",
-                    Recommendation.status == "open",
-                )
-                .first()
-            )
-            if exists:
-                skipped_existing += 1
-                continue
-
-            # Heuristic savings estimate from how far below thresholds we are.
-            cpu_gap_ratio = max((cpu_threshold - float(avg_cpu)) / cpu_threshold, 0.0)
-            mem_gap_ratio = max((memory_threshold - float(avg_mem)) / memory_threshold, 0.0)
-            savings_estimate = round(30.0 + (cpu_gap_ratio * 20.0) + (mem_gap_ratio * 20.0), 2)
-            confidence = round(min(0.7 + ((cpu_gap_ratio + mem_gap_ratio) / 4.0), 0.95), 2)
-
-            rec = Recommendation(
-                resource_id=resource.id,
-                rule_name="ecs_underutilized_service",
-                severity="medium",
-                estimated_monthly_savings=savings_estimate,
-                confidence_score=confidence,
-                action="reduce_task_size_or_scale_schedule",
-                status="open",
-            )
-            db.add(rec)
-            created_recommendations += 1
-
-    db.commit()
-    return {
-        "scanned_services": scanned_services,
-        "created_recommendations": created_recommendations,
-        "skipped_existing": skipped_existing,
-        "window_hours": 24,
-        "thresholds": {
-            "cpu_utilization_pct": cpu_threshold,
-            "memory_utilization_pct": memory_threshold,
-            "min_samples": min_samples,
-        },
-    }
+    return run_ecs_underutilized_rule_service(db)
 
 
 @router.get("/recommendations", response_model=list[RecommendationOut])
@@ -425,98 +266,7 @@ def simulate_recommendation(
     recommendation = db.query(Recommendation).filter(Recommendation.id == recommendation_id).first()
     if not recommendation:
         raise HTTPException(status_code=404, detail="recommendation not found")
-
-    avg_cpu = (
-        db.query(func.avg(UsageMetric.cpu_utilization))
-        .filter(UsageMetric.resource_id == recommendation.resource_id)
-        .scalar()
-    )
-    avg_mem = (
-        db.query(func.avg(UsageMetric.memory_utilization))
-        .filter(UsageMetric.resource_id == recommendation.resource_id)
-        .scalar()
-    )
-    now = datetime.now(timezone.utc)
-    current_window_start = now - timedelta(hours=24)
-    previous_window_start = now - timedelta(hours=48)
-
-    current_avg_cpu = (
-        db.query(func.avg(UsageMetric.cpu_utilization))
-        .filter(
-            UsageMetric.resource_id == recommendation.resource_id,
-            UsageMetric.recorded_at >= current_window_start,
-            UsageMetric.recorded_at <= now,
-        )
-        .scalar()
-    )
-    previous_avg_cpu = (
-        db.query(func.avg(UsageMetric.cpu_utilization))
-        .filter(
-            UsageMetric.resource_id == recommendation.resource_id,
-            UsageMetric.recorded_at >= previous_window_start,
-            UsageMetric.recorded_at < current_window_start,
-        )
-        .scalar()
-    )
-    trend_direction, trend_percent = compute_trend_percent(
-        float(current_avg_cpu) if current_avg_cpu is not None else None,
-        float(previous_avg_cpu) if previous_avg_cpu is not None else None,
-    )
-
-    if avg_cpu is None:
-        current_monthly_cost = max(recommendation.estimated_monthly_savings * 4, 1.0)
-    else:
-        current_monthly_cost = compute_metric_based_baseline(
-            float(avg_cpu),
-            float(avg_mem) if avg_mem is not None else None,
-        )
-
-    projected_monthly_cost = current_monthly_cost * (1 - payload.reduction_percent / 100)
-    projected_monthly_savings = current_monthly_cost - projected_monthly_cost
-
-    base_risk = payload.reduction_percent / 100.0
-    utilization_pressure = 0.0
-    if avg_cpu is not None:
-        utilization_pressure += min(float(avg_cpu) / 100.0, 1.0) * 0.5
-    if avg_mem is not None:
-        utilization_pressure += min(float(avg_mem) / 100.0, 1.0) * 0.3
-
-    risk_score = min(base_risk + utilization_pressure, 0.95)
-    if trend_direction == "up" and trend_percent > 10:
-        risk_score = min(risk_score + 0.1, 0.95)
-    elif trend_direction == "down" and trend_percent < -10:
-        risk_score = max(risk_score - 0.05, 0.0)
-
-    if risk_score < 0.30:
-        risk_level = "low"
-    elif risk_score < 0.60:
-        risk_level = "medium"
-    else:
-        risk_level = "high"
-
-    simulation = SimulationRun(
-        recommendation_id=recommendation.id,
-        reduction_percent=payload.reduction_percent,
-        current_monthly_cost=round(current_monthly_cost, 2),
-        projected_monthly_cost=round(projected_monthly_cost, 2),
-        projected_monthly_savings=round(projected_monthly_savings, 2),
-        risk_score=round(risk_score, 2),
-        risk_level=risk_level,
-    )
-    db.add(simulation)
-    db.commit()
-
-    return SimulationOut(
-        recommendation_id=recommendation.id,
-        current_monthly_cost=round(current_monthly_cost, 2),
-        projected_monthly_cost=round(projected_monthly_cost, 2),
-        projected_monthly_savings=round(projected_monthly_savings, 2),
-        reduction_percent=payload.reduction_percent,
-        risk_score=round(risk_score, 2),
-        risk_level=risk_level,
-        trend_direction=trend_direction,
-        trend_percent=trend_percent,
-    )
+    return run_recommendation_simulation(db, recommendation, payload)
 
 
 @router.get("/recommendations/{recommendation_id}/simulations", response_model=list[SimulationRunOut])
