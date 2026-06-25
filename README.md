@@ -58,7 +58,10 @@ Savings numbers are **estimates from utilization rules**, not pulled from AWS Co
 git clone https://github.com/aminuiliyasu/Real-Time-Cloud-Cost-Optimization-Engine.git
 cd Real-Time-Cloud-Cost-Optimization-Engine
 cp .env.example .env
+git config core.hooksPath .githooks
 ```
+
+The git hook strips accidental AI co-author trailers from commit messages.
 
 Edit `.env` — set your AWS profiles as `profile:region` pairs:
 
