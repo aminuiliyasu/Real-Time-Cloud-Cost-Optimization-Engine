@@ -63,15 +63,13 @@ git config core.hooksPath .githooks
 
 The git hook strips accidental AI co-author trailers from commit messages.
 
-Edit `.env` — set your AWS profiles and **generate your own secrets** (do not use example values):
+Edit `.env` and add a database credential and API key (generate random strings — do not commit `.env`).
 
 ```env
 AWS_PROFILES=default:af-south-1,rhentify-aws:us-east-1
-POSTGRES_PASSWORD=<your-password>
-API_KEY=<your-api-key>
 ```
 
-Never commit `.env`. The dashboard reads your API key from the header field or `?api_key=` in the URL.
+The dashboard reads your API key from the header field or `?api_key=` in the URL.
 
 ### 2. Start database and cache
 

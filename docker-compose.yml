@@ -2,10 +2,10 @@ services:
   postgres:
     image: postgres:16
     container_name: rtcco_postgres
+    env_file: .env
     environment:
       POSTGRES_DB: cost_optimizer
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "55432:5432"
     volumes:
