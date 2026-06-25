@@ -1,3 +1,10 @@
+import os
+
+# Test credentials only — never use in production.
+os.environ.setdefault("API_KEY", "pytest-local-api-key")
+os.environ.setdefault("POSTGRES_URL", "postgresql://postgres:pytest@localhost:5432/test")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+
 from datetime import datetime, timedelta, timezone
 
 import pytest

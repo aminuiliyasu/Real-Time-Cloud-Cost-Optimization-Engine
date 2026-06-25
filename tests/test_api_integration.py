@@ -17,14 +17,17 @@ def test_dashboard_kpis_contract(client, seeded_data):
 
 
 def test_recommendation_lifecycle_and_audit_logs(client, seeded_data):
+    import os
+
     recommendation_id = seeded_data["recommendation"].id
+    api_key = os.environ["API_KEY"]
     headers_operator = {
-        "X-API-Key": "change_me_strong_key",
+        "X-API-Key": api_key,
         "X-Role": "operator",
         "Content-Type": "application/json",
     }
     headers_admin = {
-        "X-API-Key": "change_me_strong_key",
+        "X-API-Key": api_key,
         "X-Role": "admin",
         "Content-Type": "application/json",
     }

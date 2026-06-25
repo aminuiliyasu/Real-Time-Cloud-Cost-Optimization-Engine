@@ -1,5 +1,5 @@
 const API_BASE_STORAGE_KEY = "rtcco_dashboard_api_base";
-const DEFAULT_DEV_API_KEY = "change_me_strong_key";
+const API_KEY_STORAGE_KEY = "rtcco_dashboard_api_key";
 const WORKFLOW_ACTOR = "finops-dashboard";
 
 const kpisNode = document.getElementById("kpis");
@@ -11,6 +11,7 @@ const chartNoteNode = document.getElementById("chart-note");
 const recommendationsBodyNode = document.getElementById("recommendations-body");
 const resourcesBodyNode = document.getElementById("resources-body");
 const apiBaseNode = document.getElementById("api-base");
+const apiKeyNode = document.getElementById("api-key");
 const actionsNoteNode = document.getElementById("actions-note");
 const reloadRecommendationsNode = document.getElementById("reload-recommendations");
 const statusBannerNode = document.getElementById("status-banner");
@@ -38,13 +39,40 @@ function getApiBase() {
 }
 
 function getApiKey() {
+  if (apiKeyNode && apiKeyNode.value.trim()) {
+    return apiKeyNode.value.trim();
+  }
   try {
     const fromQuery = new URLSearchParams(window.location.search).get("api_key");
-    if (fromQuery && fromQuery.trim()) return fromQuery.trim();
+    if (fromQuery && fromQuery.trim()) {
+      localStorage.setItem(API_KEY_STORAGE_KEY, fromQuery.trim());
+      return fromQuery.trim();
+    }
   } catch {
     /* ignore */
   }
-  return DEFAULT_DEV_API_KEY;
+  try {
+    const stored = localStorage.getItem(API_KEY_STORAGE_KEY);
+    if (stored && stored.trim()) return stored.trim();
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+function loadStoredApiKey() {
+  const key = getApiKey();
+  if (key && apiKeyNode) apiKeyNode.value = key;
+}
+
+function persistApiKey() {
+  if (!apiKeyNode) return;
+  try {
+    const value = apiKeyNode.value.trim();
+    if (value) localStorage.setItem(API_KEY_STORAGE_KEY, value);
+  } catch {
+    /* ignore */
+  }
 }
 
 function persistApiBase() {
@@ -529,6 +557,8 @@ simRunNode.addEventListener("click", async () => {
 
 apiBaseNode.addEventListener("change", persistApiBase);
 apiBaseNode.addEventListener("blur", persistApiBase);
+apiKeyNode.addEventListener("change", persistApiKey);
+apiKeyNode.addEventListener("blur", persistApiKey);
 
 document.getElementById("btn-list-resources").addEventListener("click", async () => {
   const btn = document.getElementById("btn-list-resources");
@@ -594,6 +624,7 @@ document.getElementById("btn-health").addEventListener("click", async () => {
 });
 
 loadStoredApiBase();
+loadStoredApiKey();
 Promise.all([loadOverview(), loadRecommendations()]).catch((err) => {
   setStatusBanner(err.message, "error");
 });
