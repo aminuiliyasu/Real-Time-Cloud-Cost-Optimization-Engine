@@ -4,6 +4,7 @@ import os
 os.environ.setdefault("API_KEY", "local-test-key")
 os.environ.setdefault("POSTGRES_URL", "postgresql://localhost/cost_optimizer_test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("GCP_PROJECTS", "")
 
 from datetime import datetime, timedelta, timezone
 

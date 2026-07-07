@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.recommendation import Recommendation
 from app.models.resource import Resource
 from app.models.usage_metric import UsageMetric
+from app.services.costs.savings import estimate_rightsizing_savings
 
 
 def run_ecs_underutilized_rule(db: Session) -> dict:
@@ -73,7 +74,7 @@ def run_ecs_underutilized_rule(db: Session) -> dict:
 
             cpu_gap_ratio = max((cpu_threshold - float(avg_cpu)) / cpu_threshold, 0.0)
             mem_gap_ratio = max((memory_threshold - float(avg_mem)) / memory_threshold, 0.0)
-            savings_estimate = round(30.0 + (cpu_gap_ratio * 20.0) + (mem_gap_ratio * 20.0), 2)
+            savings_estimate = estimate_rightsizing_savings(float(avg_cpu), float(avg_mem))
             confidence = round(min(0.7 + ((cpu_gap_ratio + mem_gap_ratio) / 4.0), 0.95), 2)
 
             rec = Recommendation(

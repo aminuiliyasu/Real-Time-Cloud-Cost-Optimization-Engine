@@ -25,7 +25,7 @@ class PortfolioSummaryOut(BaseModel):
     monthly_waste_identified: float
     annual_waste_identified: float
     realized_monthly_savings: float
-    manual_review_reduction_pct: int
+    automated_coverage_pct: int
     optimization_breakdown: OptimizationBreakdownOut
     accounts: list[AccountSummaryOut]
     last_sync_at: str | None

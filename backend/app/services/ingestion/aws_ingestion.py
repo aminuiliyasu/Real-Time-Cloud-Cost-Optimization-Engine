@@ -27,7 +27,17 @@ def _aws_profile_regions() -> list[tuple[str, str | None]]:
 
 def _merge_resource(db: Session, item: dict) -> str:
     existing = db.query(Resource).filter(Resource.resource_id == item["resource_id"]).first()
-    tag_str = json.dumps(item.get("tags", []))
+    tags_payload = item.get("tags", [])
+    if isinstance(tags_payload, dict):
+        tag_str = json.dumps(tags_payload)
+    else:
+        tag_str = json.dumps(tags_payload)
+    if item.get("source_profile"):
+        meta = json.loads(tag_str) if tag_str.startswith("{") else {"aws_tags": tags_payload}
+        if isinstance(meta, list):
+            meta = {"aws_tags": meta}
+        meta["source_profile"] = item["source_profile"]
+        tag_str = json.dumps(meta)
     if existing:
         existing.cloud_provider = item["cloud_provider"]
         existing.resource_type = item["resource_type"]
@@ -67,6 +77,19 @@ def ingest_aws_resources(db: Session) -> dict:
     return {"inserted": inserted, "updated": updated, "profiles_scanned": profiles_scanned}
 
 
+def _resource_profile(resource: Resource) -> str | None:
+    if not resource.tags:
+        return None
+    try:
+        tags = json.loads(resource.tags)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(tags, dict):
+        profile = tags.get("source_profile")
+        return str(profile) if profile else None
+    return None
+
+
 def ingest_aws_metrics(db: Session, hours: int = 24) -> dict:
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=hours)
@@ -75,7 +98,8 @@ def ingest_aws_metrics(db: Session, hours: int = 24) -> dict:
     written = 0
     for resource in resources:
         region = resource.region or settings.aws_region
-        provider = AwsProvider(region_name=region)
+        profile = _resource_profile(resource)
+        provider = AwsProvider(profile_name=profile, region_name=region)
         metrics = provider.fetch_cpu_metrics(resource.resource_id, start, end)
         for metric in metrics:
             exists = (
@@ -137,7 +161,8 @@ def ingest_aws_ecs_metrics(db: Session, hours: int = 24) -> dict:
             continue
 
         region = resource.region or settings.aws_region
-        provider = AwsProvider(region_name=region)
+        profile = _resource_profile(resource)
+        provider = AwsProvider(profile_name=profile, region_name=region)
         metrics = provider.fetch_ecs_metrics(cluster_name, service_name, start, end)
         for metric in metrics:
             exists = (

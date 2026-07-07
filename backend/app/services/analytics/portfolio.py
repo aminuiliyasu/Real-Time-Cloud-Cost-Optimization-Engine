@@ -97,8 +97,10 @@ def get_portfolio_summary(db: Session) -> PortfolioSummaryOut:
         setattr(breakdown, category, getattr(breakdown, category) + 1)
 
     last_metric_at = db.query(func.max(UsageMetric.recorded_at)).scalar()
-    automated_actions = total_recommendations + total_resources
-    manual_reduction = 80 if automated_actions >= 3 else max(0, min(80, automated_actions * 20))
+    if total_resources > 0:
+        automated_coverage_pct = min(100, int(round((total_recommendations / total_resources) * 100)))
+    else:
+        automated_coverage_pct = 0
 
     return PortfolioSummaryOut(
         accounts_monitored=len(accounts),
@@ -109,7 +111,7 @@ def get_portfolio_summary(db: Session) -> PortfolioSummaryOut:
         monthly_waste_identified=round(monthly_waste, 2),
         annual_waste_identified=round(monthly_waste * 12, 2),
         realized_monthly_savings=round(realized_monthly, 2),
-        manual_review_reduction_pct=manual_reduction,
+        automated_coverage_pct=automated_coverage_pct,
         optimization_breakdown=breakdown,
         accounts=accounts,
         last_sync_at=last_metric_at.isoformat() if last_metric_at else None,

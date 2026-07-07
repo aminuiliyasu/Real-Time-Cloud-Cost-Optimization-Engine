@@ -4,23 +4,28 @@ from sqlalchemy.orm import Session
 from app.models.recommendation import Recommendation
 from app.models.resource import Resource
 from app.models.usage_metric import UsageMetric
+from app.services.costs.savings import estimate_shutdown_savings
 
 
 def run_scheduled_shutdown_rule(db: Session) -> dict[str, int]:
-    """Flag idle non-production workloads for nights/weekends shutdown schedules."""
     cpu_threshold = 8.0
     min_samples = 4
     created = 0
 
     resources = (
         db.query(Resource)
-        .filter(Resource.cloud_provider == "aws", Resource.resource_type == "ec2")
+        .filter(Resource.resource_type.in_(["ec2", "gce_instance"]))
         .all()
     )
 
     for resource in resources:
         avg_cpu = (
             db.query(func.avg(UsageMetric.cpu_utilization))
+            .filter(UsageMetric.resource_id == resource.id)
+            .scalar()
+        )
+        avg_mem = (
+            db.query(func.avg(UsageMetric.memory_utilization))
             .filter(UsageMetric.resource_id == resource.id)
             .scalar()
         )
@@ -48,7 +53,7 @@ def run_scheduled_shutdown_rule(db: Session) -> dict[str, int]:
         if exists:
             continue
 
-        savings = round(35.0 + max(0.0, (cpu_threshold - float(avg_cpu)) * 3.0), 2)
+        savings = estimate_shutdown_savings(float(avg_cpu), float(avg_mem) if avg_mem else None)
         db.add(
             Recommendation(
                 resource_id=resource.id,

@@ -7,6 +7,7 @@ from app.services.ingestion.aws_ingestion import (
     ingest_aws_metrics,
     ingest_aws_resources,
 )
+from app.services.ingestion.gcp_ingestion import ingest_gcp_metrics, ingest_gcp_resources
 from app.services.rules.ecs_underutilized import run_ecs_underutilized_rule
 from app.services.rules.idle_vm import run_idle_vm_rule
 from app.services.rules.migration_candidate import run_migration_candidate_rule
@@ -16,8 +17,10 @@ from app.services.rules.scheduled_shutdown import run_scheduled_shutdown_rule
 def run_full_analysis_pipeline(db: Session, hours: int = 24) -> dict:
     ec2_resources = ingest_aws_resources(db)
     ecs_resources = ingest_aws_ecs_resources(db)
+    gcp_resources = ingest_gcp_resources(db)
     ec2_metrics = ingest_aws_metrics(db, hours=hours)
     ecs_metrics = ingest_aws_ecs_metrics(db, hours=hours)
+    gcp_metrics = ingest_gcp_metrics(db, hours=hours)
 
     ecs_rule = run_ecs_underutilized_rule(db)
     idle_rule = run_idle_vm_rule(db)
@@ -31,8 +34,10 @@ def run_full_analysis_pipeline(db: Session, hours: int = 24) -> dict:
         "ingestion": {
             "ec2_resources": ec2_resources,
             "ecs_resources": ecs_resources,
+            "gcp_resources": gcp_resources,
             "ec2_metrics": ec2_metrics,
             "ecs_metrics": ecs_metrics,
+            "gcp_metrics": gcp_metrics,
         },
         "rules": {
             "ecs_underutilized": ecs_rule,

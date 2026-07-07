@@ -1,183 +1,112 @@
-const API_BASE_STORAGE_KEY = "rtcco_dashboard_api_base";
-const API_KEY_STORAGE_KEY = "rtcco_dashboard_api_key";
-const WORKFLOW_ACTOR = "finops-dashboard";
+const API_BASE_KEY = "rtcco_api_base";
+const API_KEY_KEY = "rtcco_api_key";
 
-const kpisNode = document.getElementById("kpis");
-const hoursNode = document.getElementById("hours");
-const hoursLabelNode = document.getElementById("hours-label");
-const refreshOverviewNode = document.getElementById("refresh-overview");
-const chartNode = document.getElementById("trend-chart");
-const chartNoteNode = document.getElementById("chart-note");
-const recommendationsBodyNode = document.getElementById("recommendations-body");
-const resourcesBodyNode = document.getElementById("resources-body");
-const apiBaseNode = document.getElementById("api-base");
-const apiKeyNode = document.getElementById("api-key");
-const actionsNoteNode = document.getElementById("actions-note");
-const reloadRecommendationsNode = document.getElementById("reload-recommendations");
-const statusBannerNode = document.getElementById("status-banner");
-const healthInlineNode = document.getElementById("health-inline");
-const heroStatsNode = document.getElementById("hero-stats");
-const accountsGridNode = document.getElementById("accounts-grid");
-const optBreakdownNode = document.getElementById("opt-breakdown");
-const simCardNode = document.getElementById("sim-card");
-const simCardDescNode = document.getElementById("sim-card-desc");
-const simReductionNode = document.getElementById("sim-reduction");
-const simReductionLabelNode = document.getElementById("sim-reduction-label");
-const simRunNode = document.getElementById("sim-run");
-const simResultNode = document.getElementById("sim-result");
-const simCloseNode = document.getElementById("sim-close");
-const simHistoryWrapNode = document.getElementById("sim-history-wrap");
-const simHistoryNode = document.getElementById("sim-history");
-const runPipelineNode = document.getElementById("btn-run-pipeline");
-const runAllRulesNode = document.getElementById("run-all-rules");
+const $ = (id) => document.getElementById(id);
 
-let activeSimulationRecId = null;
+const nodes = {
+  apiBase: $("api-base"),
+  apiKey: $("api-key"),
+  status: $("status-banner"),
+  health: $("health-inline"),
+  hero: $("hero-stats"),
+  accounts: $("accounts-grid"),
+  opt: $("opt-breakdown"),
+  kpis: $("kpis"),
+  hours: $("hours"),
+  chart: $("trend-chart"),
+  chartNote: $("chart-note"),
+  resources: $("resources-body"),
+  recommendations: $("recommendations-body"),
+  simCard: $("sim-card"),
+  simDesc: $("sim-card-desc"),
+  simReduction: $("sim-reduction"),
+  simLabel: $("sim-reduction-label"),
+  simResult: $("sim-result"),
+  simHistoryWrap: $("sim-history-wrap"),
+  simHistory: $("sim-history"),
+};
 
-function getApiBase() {
-  const raw = apiBaseNode.value.trim() || "http://127.0.0.1:8000";
-  return raw.replace(/\/$/, "");
+let activeSimRecId = null;
+
+function apiBase() {
+  return (nodes.apiBase.value.trim() || "http://127.0.0.1:8000").replace(/\/$/, "");
 }
 
-function getApiKey() {
-  if (apiKeyNode && apiKeyNode.value.trim()) {
-    return apiKeyNode.value.trim();
+function apiKey() {
+  if (nodes.apiKey.value.trim()) return nodes.apiKey.value.trim();
+  const fromQuery = new URLSearchParams(location.search).get("api_key");
+  if (fromQuery) {
+    localStorage.setItem(API_KEY_KEY, fromQuery.trim());
+    return fromQuery.trim();
   }
-  try {
-    const fromQuery = new URLSearchParams(window.location.search).get("api_key");
-    if (fromQuery && fromQuery.trim()) {
-      localStorage.setItem(API_KEY_STORAGE_KEY, fromQuery.trim());
-      return fromQuery.trim();
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const stored = localStorage.getItem(API_KEY_STORAGE_KEY);
-    if (stored && stored.trim()) return stored.trim();
-  } catch {
-    /* ignore */
-  }
-  return "";
+  return localStorage.getItem(API_KEY_KEY) || "";
 }
 
-function loadStoredApiKey() {
-  const key = getApiKey();
-  if (key && apiKeyNode) apiKeyNode.value = key;
+function adminHeaders() {
+  return { "X-API-Key": apiKey(), "X-Role": "admin" };
 }
 
-function persistApiKey() {
-  if (!apiKeyNode) return;
-  try {
-    const value = apiKeyNode.value.trim();
-    if (value) localStorage.setItem(API_KEY_STORAGE_KEY, value);
-  } catch {
-    /* ignore */
-  }
-}
-
-function persistApiBase() {
-  try {
-    localStorage.setItem(API_BASE_STORAGE_KEY, getApiBase());
-  } catch {
-    /* ignore */
-  }
-}
-
-function loadStoredApiBase() {
-  try {
-    const stored = localStorage.getItem(API_BASE_STORAGE_KEY);
-    if (stored) apiBaseNode.value = stored;
-  } catch {
-    /* ignore */
-  }
-}
-
-function setStatusBanner(message, kind) {
+function setStatus(message, kind) {
   if (!message) {
-    statusBannerNode.hidden = true;
-    statusBannerNode.textContent = "";
-    statusBannerNode.classList.remove("is-error", "is-success", "is-info");
+    nodes.status.hidden = true;
+    nodes.status.textContent = "";
+    nodes.status.className = "banner";
     return;
   }
-  statusBannerNode.hidden = false;
-  statusBannerNode.textContent = message;
-  statusBannerNode.classList.remove("is-error", "is-success", "is-info");
-  if (kind === "error") statusBannerNode.classList.add("is-error");
-  if (kind === "success") statusBannerNode.classList.add("is-success");
-  if (kind === "info") statusBannerNode.classList.add("is-info");
+  nodes.status.hidden = false;
+  nodes.status.textContent = message;
+  nodes.status.className = `banner is-${kind || "info"}`;
 }
 
-function setButtonBusy(button, busy) {
+function setBusy(button, busy) {
   if (!button) return;
-  if (busy) {
-    if (!button.dataset.defaultLabel) button.dataset.defaultLabel = button.textContent.trim();
-    button.classList.add("is-busy");
-    button.disabled = true;
-  } else {
-    button.classList.remove("is-busy");
-    button.disabled = false;
-    if (button.dataset.defaultLabel) button.textContent = button.dataset.defaultLabel;
-  }
+  button.disabled = busy;
 }
 
-function fmtMoney(value) {
-  return `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+function money(value) {
+  return `$${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
-function escapeHtml(s) {
-  return String(s)
+function esc(text) {
+  return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/>/g, "&gt;");
 }
 
 async function fetchJson(path, options = {}) {
-  const res = await fetch(`${getApiBase()}${path}`, options);
-  const text = await res.text();
-  let body;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = text;
-  }
+  const res = await fetch(`${apiBase()}${path}`, options);
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail = body && typeof body === "object" && body.detail !== undefined ? body.detail : body;
+    const detail = body.detail ?? res.statusText;
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
   return body;
 }
 
-function adminHeaders() {
-  return { "X-API-Key": getApiKey(), "X-Role": "admin" };
-}
-
 function renderHero(portfolio) {
   if (!portfolio) {
-    heroStatsNode.innerHTML = `
-      <article class="hero-stat hero-stat-muted">
-        <span class="hero-stat-value">—</span>
-        <span class="hero-stat-label">Run analysis to load live AWS data</span>
-      </article>`;
+    nodes.hero.innerHTML = `<div class="stat"><span class="stat-value">—</span><span class="stat-label">Run analysis to load data</span></div>`;
     return;
   }
 
-  const cards = [
-    [fmtMoney(portfolio.annual_waste_identified), "Annual waste identified"],
-    [`${portfolio.accounts_monitored}`, "Cloud accounts"],
-    [`${portfolio.manual_review_reduction_pct}%`, "Less manual review time"],
-    [fmtMoney(portfolio.monthly_waste_identified), "Monthly savings potential"],
+  const lastSync = portfolio.last_sync_at
+    ? new Date(portfolio.last_sync_at).toLocaleString()
+    : "Not synced yet";
+
+  const items = [
+    [money(portfolio.annual_waste_identified), "Annual waste identified"],
+    [`${portfolio.accounts_monitored}`, "Accounts monitored"],
+    [`${portfolio.automated_coverage_pct}%`, "Resources with findings"],
+    [money(portfolio.monthly_waste_identified), "Monthly potential"],
     [`${portfolio.open_recommendations}`, "Open recommendations"],
-    [fmtMoney(portfolio.realized_monthly_savings), "Realized / month"],
+    [lastSync, "Last metric sync"],
   ];
 
-  heroStatsNode.innerHTML = cards
+  nodes.hero.innerHTML = items
     .map(
-      ([value, label]) => `
-      <article class="hero-stat">
-        <span class="hero-stat-value">${value}</span>
-        <span class="hero-stat-label">${label}</span>
-      </article>`
+      ([value, label]) =>
+        `<div class="stat"><span class="stat-value">${esc(value)}</span><span class="stat-label">${esc(label)}</span></div>`
     )
     .join("");
 }
@@ -185,67 +114,60 @@ function renderHero(portfolio) {
 function renderAccounts(portfolio) {
   const accounts = portfolio?.accounts || [];
   if (!accounts.length) {
-    accountsGridNode.innerHTML =
-      '<p class="table-empty">No accounts yet. Click <strong>Run full analysis</strong> to ingest from AWS.</p>';
+    nodes.accounts.innerHTML = `<p class="muted">No accounts yet. Run full analysis.</p>`;
     return;
   }
-  accountsGridNode.innerHTML = accounts
+  nodes.accounts.innerHTML = accounts
     .map(
       (a) => `
-    <article class="account-card">
-      <span class="account-provider">${escapeHtml(a.cloud_provider.toUpperCase())}</span>
-      <span class="account-id">${escapeHtml(a.account_id)}</span>
-      <dl class="account-meta">
-        <div><dt>Resources</dt><dd>${a.resource_count}</dd></div>
-        <div><dt>Open recs</dt><dd>${a.open_recommendations}</dd></div>
-        <div><dt>Potential</dt><dd>${fmtMoney(a.monthly_savings_potential)}/mo</dd></div>
-      </dl>
-    </article>`
+      <article class="account-card">
+        <span class="account-provider">${esc(a.cloud_provider)}</span>
+        <span class="account-id">${esc(a.account_id)}</span>
+        <dl class="account-meta">
+          <div><dt>Resources</dt><dd>${a.resource_count}</dd></div>
+          <div><dt>Open</dt><dd>${a.open_recommendations}</dd></div>
+          <div><dt>Potential</dt><dd>${money(a.monthly_savings_potential)}/mo</dd></div>
+        </dl>
+      </article>`
     )
     .join("");
 }
 
-function renderOptBreakdown(portfolio) {
+function renderBreakdown(portfolio) {
   const b = portfolio?.optimization_breakdown;
   if (!b) {
-    optBreakdownNode.innerHTML = "";
+    nodes.opt.innerHTML = "";
     return;
   }
-  const items = [
-    ["Rightsizing", b.rightsizing, "Downsize over-provisioned compute"],
-    ["Scheduled shutdowns", b.scheduled_shutdown, "Off-hours stop for idle workloads"],
-    ["Migrations", b.migration, "Move to smaller instance families"],
-    ["Other", b.other, "Additional optimizations"],
+  const rows = [
+    ["Rightsizing", b.rightsizing],
+    ["Scheduled shutdowns", b.scheduled_shutdown],
+    ["Migrations", b.migration],
+    ["Other", b.other],
   ];
-  optBreakdownNode.innerHTML = items
+  nodes.opt.innerHTML = rows
     .map(
-      ([title, count, desc]) => `
-    <article class="opt-item">
-      <span class="opt-count">${count}</span>
-      <div>
-        <h3 class="opt-title">${title}</h3>
-        <p class="opt-desc">${desc}</p>
-      </div>
-    </article>`
+      ([title, count]) =>
+        `<article class="opt-item"><span class="opt-count">${count}</span><span class="opt-desc">${title}</span></article>`
     )
     .join("");
 }
 
 function renderKpis(kpis) {
-  const cards = [
+  const rows = [
     ["Resources", kpis.total_resources],
     ["Recommendations", kpis.total_recommendations],
     ["Open", kpis.open_recommendations],
     ["Executed", kpis.executed_recommendations],
-    ["Potential / mo", fmtMoney(kpis.total_estimated_monthly_savings)],
-    ["Realized / mo", fmtMoney(kpis.realized_monthly_savings)],
+    ["Potential / mo", money(kpis.total_estimated_monthly_savings)],
+    ["Realized / mo", money(kpis.realized_monthly_savings)],
   ];
-  kpisNode.innerHTML = cards
-    .map(([label, value]) => `<article class="kpi"><div class="label">${label}</div><div class="value">${value}</div></article>`)
+  nodes.kpis.innerHTML = rows
+    .map(([label, value]) => `<article class="kpi"><span class="value">${value}</span><span class="label">${label}</span></article>`)
     .join("");
 }
 
-function toLine(points, key, width, height, pad) {
+function line(points, key, width, height, pad) {
   if (!points.length) return "";
   const values = points.map((p) => Number(p[key] || 0));
   const min = Math.min(...values);
@@ -261,370 +183,309 @@ function toLine(points, key, width, height, pad) {
 }
 
 function renderChart(points) {
-  const width = 1000;
-  const height = 320;
-  const pad = 24;
-  const cpuLine = toLine(points, "avg_cpu_utilization", width, height, pad);
-  const memoryLine = toLine(points, "avg_memory_utilization", width, height, pad);
-  chartNode.innerHTML = `
-    <polyline fill="none" stroke="#5b8def" stroke-width="2" points="${cpuLine}" />
-    <polyline fill="none" stroke="#6dd4b0" stroke-width="2" points="${memoryLine}" />
+  nodes.chart.innerHTML = `
+    <polyline fill="none" stroke="#2563eb" stroke-width="2" points="${line(points, "avg_cpu_utilization", 1000, 280, 20)}" />
+    <polyline fill="none" stroke="#059669" stroke-width="2" points="${line(points, "avg_memory_utilization", 1000, 280, 20)}" />
   `;
-  chartNoteNode.textContent = points.length
-    ? `${points.length} hourly data points from CloudWatch`
-    : "No metrics yet — run full analysis to pull live AWS data.";
+  nodes.chartNote.textContent = points.length
+    ? `${points.length} hourly points`
+    : "No metrics yet. Run analysis or pull metrics.";
 }
 
-function severityClass(sev) {
-  const s = String(sev || "").toLowerCase();
-  if (s === "high" || s === "critical") return "severity-high";
-  if (s === "medium") return "severity-medium";
-  return "severity-low";
-}
+const ruleNames = {
+  idle_vm: "Idle VM",
+  ecs_underutilized_service: "ECS underutilized",
+  scheduled_shutdown: "Scheduled shutdown",
+  migration_candidate: "Migration",
+};
 
-function friendlyAction(action) {
-  const map = {
-    rightsizing_downsize_instance: "Rightsize instance",
-    reduce_task_size_or_scale_schedule: "Rightsize ECS tasks",
-    schedule_shutdown_weeknights: "Schedule shutdown",
-    migrate_to_smaller_instance_family: "Migrate instance type",
-  };
-  return map[action] || action || "—";
-}
+const actionNames = {
+  rightsizing_downsize_instance: "Rightsize",
+  reduce_task_size_or_scale_schedule: "Rightsize ECS",
+  schedule_shutdown_weeknights: "Schedule shutdown",
+  migrate_to_smaller_instance_family: "Migrate",
+};
 
-function friendlyRule(rule) {
-  const map = {
-    idle_vm: "Idle VM",
-    ecs_underutilized_service: "ECS underutilized",
-    scheduled_shutdown: "Scheduled shutdown",
-    migration_candidate: "Migration candidate",
-  };
-  return map[rule] || rule;
-}
-
-function renderRecommendations(recommendations) {
-  if (!recommendations.length) {
-    recommendationsBodyNode.innerHTML =
-      '<tr><td colspan="6" class="table-empty">No recommendations yet. Run <strong>full analysis</strong> or <strong>all rules</strong>.</td></tr>';
+function renderRecommendations(items) {
+  if (!items.length) {
+    nodes.recommendations.innerHTML = `<tr><td colspan="6" class="table-empty">No recommendations yet.</td></tr>`;
     return;
   }
-  recommendationsBodyNode.innerHTML = recommendations
+  nodes.recommendations.innerHTML = items
     .map((rec) => {
       const canApprove = rec.status === "open";
       const canExecute = rec.status === "approved";
       return `
       <tr>
-        <td>${escapeHtml(friendlyRule(rec.rule_name))}</td>
-        <td>${escapeHtml(friendlyAction(rec.action))}</td>
-        <td><span class="sev ${severityClass(rec.severity)}">${escapeHtml(rec.severity || "—")}</span></td>
+        <td>${esc(ruleNames[rec.rule_name] || rec.rule_name)}</td>
+        <td>${esc(actionNames[rec.action] || rec.action || "—")}</td>
+        <td><span class="sev severity-${rec.severity || "low"}">${esc(rec.severity || "—")}</span></td>
         <td><span class="badge ${rec.status}">${rec.status}</span></td>
-        <td>${fmtMoney(rec.estimated_monthly_savings)}</td>
+        <td>${money(rec.estimated_monthly_savings)}</td>
         <td class="workflow-cell">
-          <button type="button" class="btn btn-sm btn-ghost" data-simulate="${rec.id}">What-if</button>
-          <button type="button" class="btn btn-sm btn-secondary" data-action="approve" data-id="${rec.id}" ${canApprove ? "" : "disabled"}>Approve</button>
-          <button type="button" class="btn btn-sm btn-primary" data-action="execute" data-id="${rec.id}" ${canExecute ? "" : "disabled"}>Apply</button>
+          <button class="btn secondary small" data-simulate="${rec.id}">What-if</button>
+          <button class="btn secondary small" data-action="approve" data-id="${rec.id}" ${canApprove ? "" : "disabled"}>Approve</button>
+          <button class="btn primary small" data-action="execute" data-id="${rec.id}" ${canExecute ? "" : "disabled"}>Apply</button>
         </td>
       </tr>`;
     })
     .join("");
 }
 
-function renderResources(resources) {
-  if (!resources.length) {
-    resourcesBodyNode.innerHTML =
-      '<tr><td colspan="5" class="table-empty">No resources yet. Run <strong>full analysis</strong> to discover AWS inventory.</td></tr>';
+function renderResources(items) {
+  if (!items.length) {
+    nodes.resources.innerHTML = `<tr><td colspan="5" class="table-empty">No resources yet.</td></tr>`;
     return;
   }
-  resourcesBodyNode.innerHTML = resources
+  nodes.resources.innerHTML = items
     .map(
       (r) => `
-    <tr>
-      <td>${escapeHtml(r.cloud_provider)}</td>
-      <td><code>${escapeHtml(r.account_id || "—")}</code></td>
-      <td>${escapeHtml(r.resource_type)}</td>
-      <td><code>${escapeHtml(r.resource_id)}</code></td>
-      <td>${escapeHtml(r.region || "—")}</td>
-    </tr>`
+      <tr>
+        <td>${esc(r.cloud_provider)}</td>
+        <td><code>${esc(r.account_id || "—")}</code></td>
+        <td>${esc(r.resource_type)}</td>
+        <td><code>${esc(r.resource_id)}</code></td>
+        <td>${esc(r.region || "—")}</td>
+      </tr>`
     )
     .join("");
 }
 
-async function loadPortfolio() {
-  return fetchJson("/dashboard/portfolio").catch(() => null);
-}
-
 async function loadOverview() {
-  const hours = Number(hoursNode.value || 24);
-  hoursLabelNode.textContent = hours >= 168 ? "7 days" : `${hours} hours`;
+  const hours = Number(nodes.hours.value || 24);
   const [kpis, trends, portfolio, resources] = await Promise.all([
     fetchJson("/dashboard/kpis"),
     fetchJson(`/dashboard/trends?hours=${hours}`),
-    loadPortfolio(),
+    fetchJson("/dashboard/portfolio").catch(() => null),
     fetchJson("/resources").catch(() => []),
   ]);
   renderHero(portfolio);
   renderAccounts(portfolio);
-  renderOptBreakdown(portfolio);
+  renderBreakdown(portfolio);
   renderKpis(kpis);
   renderChart(trends.points || []);
   renderResources(Array.isArray(resources) ? resources : []);
 }
 
 async function loadRecommendations() {
-  const recommendations = await fetchJson("/recommendations");
-  renderRecommendations(recommendations);
-}
-
-async function mutateRecommendation(id, action) {
-  const res = await fetch(`${getApiBase()}/recommendations/${id}/${action}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": getApiKey(),
-      "X-Role": action === "approve" ? "operator" : "admin",
-    },
-    body: JSON.stringify({
-      actor: WORKFLOW_ACTOR,
-      notes: action === "approve" ? "approved from dashboard" : "executed from dashboard",
-    }),
-  });
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.detail || `Failed to ${action} recommendation ${id}`);
-}
-
-function chartHours() {
-  return Number(hoursNode.value || 24);
-}
-
-function openSimulationPanel(recId) {
-  activeSimulationRecId = recId;
-  simCardNode.hidden = false;
-  simCardDescNode.textContent = `Recommendation #${recId} — adjust reduction %, then run what-if.`;
-  simResultNode.innerHTML = "";
-  simHistoryWrapNode.hidden = true;
-  simHistoryNode.innerHTML = "";
-  simCardNode.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  void loadSimulationHistory(recId);
-}
-
-function closeSimulationPanel() {
-  activeSimulationRecId = null;
-  simCardNode.hidden = true;
-}
-
-async function loadSimulationHistory(recId) {
-  try {
-    const runs = await fetchJson(`/recommendations/${recId}/simulations`);
-    if (!Array.isArray(runs) || !runs.length) {
-      simHistoryWrapNode.hidden = true;
-      return;
-    }
-    simHistoryWrapNode.hidden = false;
-    simHistoryNode.innerHTML = runs
-      .slice(0, 6)
-      .map(
-        (r) =>
-          `<li>${r.reduction_percent}% reduction → save ${fmtMoney(r.projected_monthly_savings)}/mo, risk <strong>${escapeHtml(r.risk_level)}</strong></li>`
-      )
-      .join("");
-  } catch {
-    simHistoryWrapNode.hidden = true;
-  }
-}
-
-function renderSimulationOut(data) {
-  if (!data) return;
-  simResultNode.innerHTML = `
-    <dl class="sim-dl">
-      <div><dt>Current / mo</dt><dd>${fmtMoney(data.current_monthly_cost)}</dd></div>
-      <div><dt>Projected / mo</dt><dd>${fmtMoney(data.projected_monthly_cost)}</dd></div>
-      <div><dt>Savings / mo</dt><dd>${fmtMoney(data.projected_monthly_savings)}</dd></div>
-      <div><dt>Risk</dt><dd>${escapeHtml(data.risk_level)}</dd></div>
-    </dl>`;
-}
-
-async function postAdminJson(path, query = "") {
-  return fetchJson(`${path}${query}`, { method: "POST", headers: adminHeaders() });
-}
-
-async function runAllRules() {
-  await postAdminJson("/dev/recommendations/run-ecs-underutilized-rule");
-  await postAdminJson("/dev/recommendations/run-idle-vm-rule");
-  await postAdminJson("/dev/recommendations/run-scheduled-shutdown-rule");
-  await postAdminJson("/dev/recommendations/run-migration-candidate-rule");
+  renderRecommendations(await fetchJson("/recommendations"));
 }
 
 async function refreshAll() {
   await Promise.all([loadOverview(), loadRecommendations()]);
 }
 
-refreshOverviewNode.addEventListener("click", () => {
-  setButtonBusy(refreshOverviewNode, true);
-  refreshAll()
-    .then(() => setStatusBanner("Dashboard updated.", "success"))
-    .catch((err) => setStatusBanner(err.message, "error"))
-    .finally(() => setButtonBusy(refreshOverviewNode, false));
-});
+async function postAdmin(path, query = "") {
+  return fetchJson(`${path}${query}`, { method: "POST", headers: adminHeaders() });
+}
 
-hoursNode.addEventListener("change", () => {
-  loadOverview().catch((err) => setStatusBanner(err.message, "error"));
-});
+async function runAllRules() {
+  await postAdmin("/dev/recommendations/run-ecs-underutilized-rule");
+  await postAdmin("/dev/recommendations/run-idle-vm-rule");
+  await postAdmin("/dev/recommendations/run-scheduled-shutdown-rule");
+  await postAdmin("/dev/recommendations/run-migration-candidate-rule");
+}
 
-runPipelineNode.addEventListener("click", async () => {
-  setButtonBusy(runPipelineNode, true);
-  setStatusBanner("Running full analysis on live AWS…", "info");
+function openSim(recId) {
+  activeSimRecId = recId;
+  nodes.simCard.hidden = false;
+  nodes.simDesc.textContent = `Recommendation #${recId}`;
+  nodes.simResult.innerHTML = "";
+  loadSimHistory(recId);
+}
+
+async function loadSimHistory(recId) {
   try {
-    const h = chartHours();
-    await postAdminJson("/dev/pipeline/run-full-analysis", `?hours=${h}`);
-    await refreshAll();
-    setStatusBanner("Full analysis complete — resources ingested, rules run, savings calculated.", "success");
-  } catch (e) {
-    setStatusBanner(e.message, "error");
-  } finally {
-    setButtonBusy(runPipelineNode, false);
-  }
-});
-
-runAllRulesNode.addEventListener("click", async () => {
-  setButtonBusy(runAllRulesNode, true);
-  try {
-    await runAllRules();
-    await refreshAll();
-    setStatusBanner("All optimization rules executed.", "success");
-  } catch (e) {
-    setStatusBanner(e.message, "error");
-  } finally {
-    setButtonBusy(runAllRulesNode, false);
-  }
-});
-
-reloadRecommendationsNode.addEventListener("click", () => {
-  setButtonBusy(reloadRecommendationsNode, true);
-  loadRecommendations()
-    .then(() => setStatusBanner("Recommendations reloaded.", "success"))
-    .catch((err) => setStatusBanner(err.message, "error"))
-    .finally(() => setButtonBusy(reloadRecommendationsNode, false));
-});
-
-recommendationsBodyNode.addEventListener("click", async (event) => {
-  const simBtn = event.target.closest("button[data-simulate]");
-  if (simBtn) {
-    openSimulationPanel(Number(simBtn.getAttribute("data-simulate")));
-    return;
-  }
-  const button = event.target.closest("button[data-action]");
-  if (!button) return;
-  const id = button.getAttribute("data-id");
-  const action = button.getAttribute("data-action");
-  setButtonBusy(button, true);
-  try {
-    await mutateRecommendation(id, action);
-    setStatusBanner(`Recommendation ${id} ${action === "approve" ? "approved" : "applied"}.`, "success");
-    await refreshAll();
-    if (activeSimulationRecId === Number(id)) await loadSimulationHistory(Number(id));
-  } catch (err) {
-    setStatusBanner(err.message, "error");
-  } finally {
-    setButtonBusy(button, false);
-  }
-});
-
-simReductionNode.addEventListener("input", () => {
-  simReductionLabelNode.textContent = `${simReductionNode.value}%`;
-});
-
-simCloseNode.addEventListener("click", closeSimulationPanel);
-
-simRunNode.addEventListener("click", async () => {
-  if (!activeSimulationRecId) return;
-  setButtonBusy(simRunNode, true);
-  try {
-    const out = await fetchJson(`/recommendations/${activeSimulationRecId}/simulate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reduction_percent: Number(simReductionNode.value) }),
-    });
-    renderSimulationOut(out);
-    setStatusBanner("What-if simulation complete.", "success");
-    await loadSimulationHistory(activeSimulationRecId);
-  } catch (e) {
-    simResultNode.innerHTML = `<p class="sim-error">${escapeHtml(e.message)}</p>`;
-    setStatusBanner(e.message, "error");
-  } finally {
-    setButtonBusy(simRunNode, false);
-  }
-});
-
-apiBaseNode.addEventListener("change", persistApiBase);
-apiBaseNode.addEventListener("blur", persistApiBase);
-apiKeyNode.addEventListener("change", persistApiKey);
-apiKeyNode.addEventListener("blur", persistApiKey);
-
-document.getElementById("btn-list-resources").addEventListener("click", async () => {
-  const btn = document.getElementById("btn-list-resources");
-  setButtonBusy(btn, true);
-  try {
-    const list = await fetchJson("/resources");
-    renderResources(list);
-  } catch (e) {
-    setStatusBanner(e.message, "error");
-  } finally {
-    setButtonBusy(btn, false);
-  }
-});
-
-async function ingestAction(fn, label) {
-  try {
-    await fn();
-    await refreshAll();
-    setStatusBanner(label, "success");
-  } catch (e) {
-    setStatusBanner(e.message, "error");
+    const runs = await fetchJson(`/recommendations/${recId}/simulations`);
+    if (!runs.length) {
+      nodes.simHistoryWrap.hidden = true;
+      return;
+    }
+    nodes.simHistoryWrap.hidden = false;
+    nodes.simHistory.innerHTML = runs
+      .slice(0, 5)
+      .map((r) => `<li>${r.reduction_percent}% → save ${money(r.projected_monthly_savings)}/mo (${esc(r.risk_level)} risk)</li>`)
+      .join("");
+  } catch {
+    nodes.simHistoryWrap.hidden = true;
   }
 }
 
-document.getElementById("ingest-aws-resources").addEventListener("click", () =>
-  ingestAction(() => postAdminJson("/dev/ingest/aws/resources"), "EC2 discovery complete.")
-);
-document.getElementById("ingest-ecs-resources").addEventListener("click", () =>
-  ingestAction(() => postAdminJson("/dev/ingest/aws/ecs/resources"), "ECS discovery complete.")
-);
-document.getElementById("ingest-aws-metrics").addEventListener("click", async () => {
-  const h = chartHours();
-  await ingestAction(
-    () =>
-      Promise.all([
-        postAdminJson("/dev/ingest/aws/metrics", `?hours=${h}`),
-        postAdminJson("/dev/ingest/aws/ecs/metrics", `?hours=${h}`),
-      ]),
-    "Metrics ingested from AWS."
-  );
-});
+function renderSim(data) {
+  nodes.simResult.innerHTML = `
+    <dl class="sim-dl">
+      <div><dt>Current / mo</dt><dd>${money(data.current_monthly_cost)}</dd></div>
+      <div><dt>Projected / mo</dt><dd>${money(data.projected_monthly_cost)}</dd></div>
+      <div><dt>Savings / mo</dt><dd>${money(data.projected_monthly_savings)}</dd></div>
+      <div><dt>Risk</dt><dd>${esc(data.risk_level)}</dd></div>
+    </dl>`;
+}
 
-document.getElementById("btn-health").addEventListener("click", async () => {
-  const btn = document.getElementById("btn-health");
-  setButtonBusy(btn, true);
-  healthInlineNode.hidden = false;
-  const checks = [
-    ["API", "/health"],
-    ["Database", "/db-check"],
-    ["Redis", "/redis-check"],
-  ];
-  const lines = [];
-  for (const [label, path] of checks) {
+async function mutateRec(id, action) {
+  const res = await fetch(`${apiBase()}/recommendations/${id}/${action}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": apiKey(),
+      "X-Role": action === "approve" ? "operator" : "admin",
+    },
+    body: JSON.stringify({ actor: "dashboard", notes: `${action} from dashboard` }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || `Failed to ${action}`);
+}
+
+function bindEvents() {
+  $("refresh-overview").addEventListener("click", async (e) => {
+    setBusy(e.target, true);
     try {
-      await fetchJson(path);
-      lines.push(`<p class="health-line health-ok">✓ ${label}</p>`);
-    } catch (e) {
-      lines.push(`<p class="health-line health-bad">✗ ${label} — ${escapeHtml(e.message)}</p>`);
+      await refreshAll();
+      setStatus("Dashboard refreshed.", "success");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(e.target, false);
     }
-  }
-  healthInlineNode.innerHTML = lines.join("");
-  setButtonBusy(btn, false);
-});
+  });
 
-loadStoredApiBase();
-loadStoredApiKey();
-Promise.all([loadOverview(), loadRecommendations()]).catch((err) => {
-  setStatusBanner(err.message, "error");
-});
+  nodes.hours.addEventListener("change", () => loadOverview().catch((e) => setStatus(e.message, "error")));
+
+  $("btn-run-pipeline").addEventListener("click", async (e) => {
+    setBusy(e.target, true);
+    setStatus("Running full analysis...", "info");
+    try {
+      await postAdmin("/dev/pipeline/run-full-analysis", `?hours=${Number(nodes.hours.value || 24)}`);
+      await refreshAll();
+      setStatus("Analysis complete.", "success");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(e.target, false);
+    }
+  });
+
+  $("run-all-rules").addEventListener("click", async (e) => {
+    setBusy(e.target, true);
+    try {
+      await runAllRules();
+      await refreshAll();
+      setStatus("Rules finished.", "success");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(e.target, false);
+    }
+  });
+
+  $("reload-recommendations").addEventListener("click", () => loadRecommendations().catch((e) => setStatus(e.message, "error")));
+
+  nodes.recommendations.addEventListener("click", async (event) => {
+    const simBtn = event.target.closest("[data-simulate]");
+    if (simBtn) {
+      openSim(Number(simBtn.dataset.simulate));
+      return;
+    }
+    const btn = event.target.closest("[data-action]");
+    if (!btn) return;
+    setBusy(btn, true);
+    try {
+      await mutateRec(btn.dataset.id, btn.dataset.action);
+      await refreshAll();
+      if (activeSimRecId === Number(btn.dataset.id)) await loadSimHistory(activeSimRecId);
+      setStatus(`Recommendation ${btn.dataset.action}d.`, "success");
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+
+  nodes.simReduction.addEventListener("input", () => {
+    nodes.simLabel.textContent = `${nodes.simReduction.value}%`;
+  });
+
+  $("sim-close").addEventListener("click", () => {
+    activeSimRecId = null;
+    nodes.simCard.hidden = true;
+  });
+
+  $("sim-run").addEventListener("click", async (e) => {
+    if (!activeSimRecId) return;
+    setBusy(e.target, true);
+    try {
+      const out = await fetchJson(`/recommendations/${activeSimRecId}/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reduction_percent: Number(nodes.simReduction.value) }),
+      });
+      renderSim(out);
+      await loadSimHistory(activeSimRecId);
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setBusy(e.target, false);
+    }
+  });
+
+  $("btn-health").addEventListener("click", async (e) => {
+    setBusy(e.target, true);
+    nodes.health.hidden = false;
+    const checks = [
+      ["API", "/health"],
+      ["Database", "/db-check"],
+      ["Redis", "/redis-check"],
+    ];
+    const lines = [];
+    for (const [label, path] of checks) {
+      try {
+        await fetchJson(path);
+        lines.push(`<p>✓ ${label}</p>`);
+      } catch (err) {
+        lines.push(`<p>✗ ${label}: ${esc(err.message)}</p>`);
+      }
+    }
+    nodes.health.innerHTML = lines.join("");
+    setBusy(e.target, false);
+  });
+
+  const ingest = async (fn, okMessage) => {
+    try {
+      await fn();
+      await refreshAll();
+      setStatus(okMessage, "success");
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  };
+
+  $("ingest-aws-resources").addEventListener("click", () =>
+    ingest(() => postAdmin("/dev/ingest/aws/resources"), "AWS inventory synced.")
+  );
+  $("ingest-gcp-resources").addEventListener("click", () =>
+    ingest(() => postAdmin("/dev/ingest/gcp/resources"), "GCP inventory synced.")
+  );
+  $("ingest-aws-metrics").addEventListener("click", () =>
+    ingest(
+      () =>
+        Promise.all([
+          postAdmin("/dev/ingest/aws/metrics", `?hours=${Number(nodes.hours.value || 24)}`),
+          postAdmin("/dev/ingest/aws/ecs/metrics", `?hours=${Number(nodes.hours.value || 24)}`),
+          postAdmin("/dev/ingest/gcp/metrics", `?hours=${Number(nodes.hours.value || 24)}`),
+        ]),
+      "Metrics pulled."
+    )
+  );
+  $("btn-list-resources").addEventListener("click", () =>
+    fetchJson("/resources").then(renderResources).catch((e) => setStatus(e.message, "error"))
+  );
+
+  nodes.apiBase.addEventListener("change", () => localStorage.setItem(API_BASE_KEY, apiBase()));
+  nodes.apiKey.addEventListener("change", () => localStorage.setItem(API_KEY_KEY, apiKey()));
+}
+
+const storedBase = localStorage.getItem(API_BASE_KEY);
+if (storedBase) nodes.apiBase.value = storedBase;
+if (apiKey()) nodes.apiKey.value = apiKey();
+
+bindEvents();
+refreshAll().catch((err) => setStatus(err.message, "error"));

@@ -1,85 +1,83 @@
 # Real-Time Cloud Cost Optimization Engine
 
-A FinOps platform that ingests **live AWS usage**, flags waste, and walks through an approve → simulate → apply workflow with a simple dashboard.
+Monitors AWS and GCP compute usage, flags waste with simple rules, and lets you review recommendations before marking them approved or applied.
 
-**Stack:** Python · FastAPI · SQLAlchemy · PostgreSQL · Redis · AWS APIs · Docker · Terraform
+**Stack:** Python · FastAPI · SQLAlchemy · PostgreSQL · Redis · AWS/GCP APIs · Docker · Terraform
 
-**Repo:** https://github.com/aminuiliyasu/Real-Time-Cloud-Cost-Optimization-Engine
+![Dashboard showing waste identified across 4 AWS accounts](docs/dashboard-screenshot.png)
 
 ---
 
 ## What it does
 
-1. **Discovers** EC2 instances and ECS services from your AWS accounts (multi-profile, multi-region).
-2. **Pulls** CloudWatch CPU/memory metrics on a schedule or on demand.
-3. **Runs rules** for rightsizing, scheduled shutdowns, idle VMs, and migration candidates.
-4. **Shows savings** per account in a portfolio view (monthly and annual estimates).
-5. **What-if simulations** let you model a % reduction before approving a change.
-6. **Workflow** — open → approved → executed, with audit logs.
+- Discovers EC2, ECS, and GCE instances from configured AWS profiles and GCP projects
+- Pulls CloudWatch / Monitoring metrics on demand or every 15 minutes via the worker
+- Runs rules for rightsizing, scheduled shutdowns, idle VMs, and migration candidates
+- Shows estimated savings per account in the dashboard
+- Supports what-if simulations and an approve → apply workflow with audit logs
 
-Savings numbers are **estimates from utilization rules**, not pulled from AWS Cost Explorer or billing APIs.
+Savings numbers come from **utilization heuristics**, not AWS Cost Explorer or GCP billing APIs.
 
-“Execute” updates status and audit logs in the database. It does **not** resize or stop AWS resources automatically.
-
----
-
-## What is not included
-
-| Area | Status |
-|------|--------|
-| GCP | Not implemented (AWS only) |
-| Billing / Cost Explorer API | Not implemented |
-| Automatic AWS changes on execute | Not implemented |
-| CI/CD pipeline | Not implemented |
-| Kubernetes | ECS only (no EKS) |
-| Storage waste rules | Not implemented |
+**Apply** only updates status in Postgres. It does not stop or resize cloud resources.
 
 ---
 
-## Project layout
-
-```
-.
-├── backend/          # FastAPI app, rules, ingestion, workers
-├── dashboard/src/    # Static demo UI (HTML/CSS/JS)
-├── infra/terraform/  # Minimal AWS VPC + EC2 skeleton
-├── tests/
-├── docker-compose.yml
-└── .env.example
-```
-
----
-
-## Quick start
-
-### 1. Clone and configure
+## Run with Docker
 
 ```bash
 git clone https://github.com/aminuiliyasu/Real-Time-Cloud-Cost-Optimization-Engine.git
 cd Real-Time-Cloud-Cost-Optimization-Engine
 cp .env.example .env
-git config core.hooksPath .githooks
 ```
 
-The git hook strips accidental AI co-author trailers from commit messages.
-
-Edit `.env` and add a database credential and API key (generate random strings — do not commit `.env`).
+Edit `.env`:
 
 ```env
+API_KEY=your-random-key
+POSTGRES_PASSWORD=postgres
 AWS_PROFILES=default:af-south-1,rhentify-aws:us-east-1
+GCP_PROJECTS=my-project:us-central1-a   # optional
 ```
 
-The dashboard reads your API key from the header field or `?api_key=` in the URL.
+Start the stack:
 
-### 2. Start database and cache
+```bash
+docker compose up -d --build
+```
+
+| Service   | URL |
+|-----------|-----|
+| Dashboard | http://127.0.0.1:5500 |
+| API       | http://127.0.0.1:8000 |
+| API docs  | http://127.0.0.1:8000/docs |
+
+Open the dashboard, paste your `API_KEY`, and click **Run full analysis**.
+
+AWS credentials are read from `~/.aws` (mounted in `docker-compose.yml`). For GCP, run `gcloud auth application-default login` or set `GOOGLE_APPLICATION_CREDENTIALS`.
+
+### Database password issues
+
+If the API fails with `password authentication failed`, the Postgres volume was probably created with an old password. Reset it:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
+Or update the password in the running container:
+
+```bash
+docker exec rtcco_postgres psql -U postgres -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+docker compose up -d --build
+```
+
+---
+
+## Local dev (API outside Docker)
 
 ```bash
 docker compose up -d postgres redis
-```
 
-### 3. Run the API
-
-```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -87,87 +85,72 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 4. Run the dashboard
-
-In a second terminal:
+Dashboard in another terminal:
 
 ```bash
-cd dashboard/src
-python3 -m http.server 5500
+cd dashboard/src && python3 -m http.server 5500
 ```
 
-Open **http://127.0.0.1:5500** and click **Run full analysis** to ingest AWS data and run all rules.
+---
+
+## Project layout
+
+```
+.
+├── backend/           # FastAPI, rules, ingestion, worker
+├── dashboard/src/     # Static UI
+├── docs/              # Screenshots
+├── infra/terraform/   # AWS VPC + EC2 host
+├── .github/workflows/ # CI
+└── docker-compose.yml
+```
 
 ---
 
-## Demo flow (for screen recording)
+## API endpoints
 
-1. Open the dashboard.
-2. Click **Run full analysis (AWS → rules → savings)**.
-3. Show account cards and annual waste identified.
-4. Scroll to the utilization chart (CloudWatch metrics).
-5. Open a recommendation → **What-if** → adjust slider → run simulation.
-6. **Approve** → **Apply** → refresh to see realized savings update.
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/health` | Health check |
+| GET | `/dashboard/portfolio` | Account summary |
+| GET | `/dashboard/kpis` | Counts and savings totals |
+| GET | `/dashboard/trends?hours=24` | Chart data |
+| GET | `/recommendations` | List recommendations |
+| POST | `/recommendations/{id}/simulate` | What-if run |
+| POST | `/recommendations/{id}/approve` | Needs `X-API-Key` + `X-Role: operator` |
+| POST | `/recommendations/{id}/execute` | Needs `X-API-Key` + `X-Role: admin` |
+| POST | `/dev/pipeline/run-full-analysis` | Dev only — ingest + rules |
 
----
-
-## API overview
-
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /health` | Health check |
-| `GET /dashboard/portfolio` | Multi-account waste summary |
-| `GET /dashboard/kpis` | KPI cards |
-| `GET /dashboard/trends?hours=24` | Utilization chart data |
-| `GET /recommendations` | List recommendations |
-| `POST /recommendations/{id}/simulate` | What-if simulation |
-| `POST /recommendations/{id}/approve` | Approve (operator/admin) |
-| `POST /recommendations/{id}/execute` | Mark executed (admin) |
-| `POST /dev/pipeline/run-full-analysis` | Ingest + run all rules (dev only) |
-
-Dev ingestion endpoints require `APP_ENV=development`, `X-API-Key`, and `X-Role: admin`.
-
-Interactive docs: **http://127.0.0.1:8000/docs**
+Dev endpoints require `APP_ENV=development`, `X-API-Key`, and `X-Role: admin`.
 
 ---
 
-## Detection rules
+## Rules
 
-| Rule | Trigger | Action type |
-|------|---------|---------------|
-| `idle_vm` | EC2 avg CPU &lt; 5% | Rightsizing |
-| `ecs_underutilized_service` | ECS CPU &lt; 20% and memory &lt; 30% | Rightsizing |
-| `scheduled_shutdown` | EC2 avg CPU &lt; 8% | Scheduled shutdown |
-| `migration_candidate` | EC2 CPU between 5–15% | Migration |
+| Rule | Trigger | Suggested action |
+|------|---------|------------------|
+| `idle_vm` | EC2/GCE avg CPU < 5% | Rightsize |
+| `ecs_underutilized_service` | ECS CPU < 20% and memory < 30% | Rightsize tasks |
+| `scheduled_shutdown` | EC2/GCE avg CPU < 8% | Schedule shutdown |
+| `migration_candidate` | EC2/GCE CPU between 5–15% | Smaller instance type |
 
 ---
 
-## Background worker (optional)
+## Background worker
+
+Included in Docker Compose. To run manually:
 
 ```bash
 cd backend
 python -m app.workers.scheduler --run-once --hours 24
-```
-
-Loop every 15 minutes:
-
-```bash
 python -m app.workers.scheduler --hours 24 --interval-seconds 900
 ```
 
 ---
 
-## Docker (all services)
+## Terraform
 
-```bash
-docker compose up -d --build
-```
-
-API on port 8000, dashboard on port 5500. Mount `~/.aws` for AWS credentials (see `docker-compose.yml`).
-
----
-
-## Terraform (minimal EC2 host)
+Minimal AWS setup: VPC, security group, EC2 with Docker, IAM read-only role for FinOps API calls.
 
 ```bash
 cd infra/terraform
@@ -175,16 +158,18 @@ cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
 ```
 
-Provisions a VPC, public subnet, security group (SSH + port 8000), and one EC2 instance. Extend this for production (HTTPS, RDS, IAM role, etc.).
+SSH to the instance, clone the repo, copy `.env`, then run `docker compose up -d --build`.
 
 ---
 
 ## Tests
 
 ```bash
-source backend/.venv/bin/activate
+cd backend && source .venv/bin/activate
 pytest -q
 ```
+
+CI runs on push/PR to `main` via GitHub Actions.
 
 ---
 

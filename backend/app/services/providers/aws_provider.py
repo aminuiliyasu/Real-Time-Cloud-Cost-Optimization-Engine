@@ -12,12 +12,12 @@ class AwsProvider(CloudProvider):
         if region_name:
             session_kwargs["region_name"] = region_name
         session = boto3.Session(**session_kwargs)
-        self._region = session.region_name or settings.aws_region
-        self._ec2 = session.client("ec2")
-        self._ecs = session.client("ecs")
-        self._cw = session.client("cloudwatch")
-        self._sts = session.client("sts")
-        self._region = settings.aws_region
+        self._profile = profile_name or settings.aws_profile
+        self._region = region_name or session.region_name or settings.aws_region
+        self._ec2 = session.client("ec2", region_name=self._region)
+        self._ecs = session.client("ecs", region_name=self._region)
+        self._cw = session.client("cloudwatch", region_name=self._region)
+        self._sts = session.client("sts", region_name=self._region)
 
     def list_resources(self) -> list[dict]:
         account_id = self._sts.get_caller_identity().get("Account", "")
@@ -32,6 +32,7 @@ class AwsProvider(CloudProvider):
                         "resource_type": "ec2",
                         "region": self._region,
                         "account_id": account_id,
+                        "source_profile": self._profile,
                         "tags": instance.get("Tags", []),
                     }
                 )
@@ -80,6 +81,7 @@ class AwsProvider(CloudProvider):
                         "resource_type": "ecs_service",
                         "region": self._region,
                         "account_id": account_id,
+                        "source_profile": self._profile,
                         "tags": {
                             "cluster_name": cluster_name,
                             "service_name": service_name,

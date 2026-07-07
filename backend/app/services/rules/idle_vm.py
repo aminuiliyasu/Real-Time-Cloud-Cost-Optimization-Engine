@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.recommendation import Recommendation
 from app.models.resource import Resource
 from app.models.usage_metric import UsageMetric
+from app.services.costs.savings import estimate_rightsizing_savings
 
 
 def run_idle_vm_rule(db: Session) -> dict[str, int]:
@@ -11,10 +12,19 @@ def run_idle_vm_rule(db: Session) -> dict[str, int]:
     min_samples = 6
     created = 0
 
-    resources = db.query(Resource).all()
+    resources = (
+        db.query(Resource)
+        .filter(Resource.resource_type.in_(["ec2", "gce_instance"]))
+        .all()
+    )
     for resource in resources:
         avg_cpu = (
             db.query(func.avg(UsageMetric.cpu_utilization))
+            .filter(UsageMetric.resource_id == resource.id)
+            .scalar()
+        )
+        avg_mem = (
+            db.query(func.avg(UsageMetric.memory_utilization))
             .filter(UsageMetric.resource_id == resource.id)
             .scalar()
         )
@@ -40,11 +50,12 @@ def run_idle_vm_rule(db: Session) -> dict[str, int]:
             if exists:
                 continue
 
+            savings = estimate_rightsizing_savings(float(avg_cpu), float(avg_mem) if avg_mem else None)
             rec = Recommendation(
                 resource_id=resource.id,
                 rule_name="idle_vm",
                 severity="medium",
-                estimated_monthly_savings=25.0,
+                estimated_monthly_savings=savings,
                 confidence_score=0.82,
                 action="rightsizing_downsize_instance",
                 status="open",

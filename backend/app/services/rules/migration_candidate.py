@@ -4,23 +4,28 @@ from sqlalchemy.orm import Session
 from app.models.recommendation import Recommendation
 from app.models.resource import Resource
 from app.models.usage_metric import UsageMetric
+from app.services.costs.savings import estimate_migration_savings
 
 
 def run_migration_candidate_rule(db: Session) -> dict[str, int]:
-    """Suggest lower-cost instance families when sustained utilization is low."""
     cpu_threshold = 15.0
     min_samples = 6
     created = 0
 
     resources = (
         db.query(Resource)
-        .filter(Resource.cloud_provider == "aws", Resource.resource_type == "ec2")
+        .filter(Resource.resource_type.in_(["ec2", "gce_instance"]))
         .all()
     )
 
     for resource in resources:
         avg_cpu = (
             db.query(func.avg(UsageMetric.cpu_utilization))
+            .filter(UsageMetric.resource_id == resource.id)
+            .scalar()
+        )
+        avg_mem = (
+            db.query(func.avg(UsageMetric.memory_utilization))
             .filter(UsageMetric.resource_id == resource.id)
             .scalar()
         )
@@ -49,8 +54,8 @@ def run_migration_candidate_rule(db: Session) -> dict[str, int]:
         if exists:
             continue
 
+        savings = estimate_migration_savings(cpu, float(avg_mem) if avg_mem else None)
         gap = (cpu_threshold - cpu) / cpu_threshold
-        savings = round(45.0 + gap * 55.0, 2)
         db.add(
             Recommendation(
                 resource_id=resource.id,

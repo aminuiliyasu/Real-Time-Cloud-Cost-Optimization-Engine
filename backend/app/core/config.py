@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     aws_profile: str = "default"
     aws_profiles: str = ""  # comma-separated profiles for multi-account ingestion
+    gcp_projects: str = ""  # comma-separated project:zone entries
+    gcp_default_zone: str = "us-central1-a"
     postgres_url: str
     redis_url: str
 

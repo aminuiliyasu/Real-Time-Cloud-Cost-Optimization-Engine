@@ -88,6 +88,14 @@ resource "aws_security_group" "backend" {
     description = "Backend API"
   }
 
+  ingress {
+    from_port   = 5500
+    to_port     = 5500
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Dashboard UI"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -101,12 +109,67 @@ resource "aws_security_group" "backend" {
   })
 }
 
+resource "aws_iam_role" "backend" {
+  name = "${var.project_name}-backend-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy" "finops_readonly" {
+  name = "${var.project_name}-finops-readonly"
+  role = aws_iam_role.backend.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ec2:Describe*",
+        "ecs:Describe*",
+        "ecs:List*",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "sts:GetCallerIdentity",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "backend" {
+  name = "${var.project_name}-backend-profile"
+  role = aws_iam_role.backend.name
+}
+
 resource "aws_instance" "backend_host" {
   ami                         = local.effective_ami_id
   instance_type               = var.instance_type
   subnet_id                   = aws_subnet.public.id
   vpc_security_group_ids      = [aws_security_group.backend.id]
   associate_public_ip_address = true
+  iam_instance_profile        = aws_iam_instance_profile.backend.name
+
+  user_data = <<-EOF
+              #!/bin/bash
+              set -e
+              dnf update -y
+              dnf install -y docker git
+              systemctl enable --now docker
+              usermod -aG docker ec2-user
+              mkdir -p /opt/rtcco
+              echo "Clone the repo and run: docker compose up -d --build" > /opt/rtcco/README.txt
+              EOF
 
   metadata_options {
     http_tokens = "required"

@@ -3,16 +3,13 @@ import json
 import time
 from datetime import datetime, timezone
 
-from app.workers.jobs import run_ingestion_cycle, run_rule_evaluation_cycle
+from app.workers.jobs import run_ingestion_cycle
 
 
 def run_once(hours: int) -> dict:
-    ingestion = run_ingestion_cycle(hours=hours)
-    rules = run_rule_evaluation_cycle()
     return {
         "ran_at": datetime.now(timezone.utc).isoformat(),
-        "ingestion": ingestion,
-        "rules": rules,
+        **run_ingestion_cycle(hours=hours),
     }
 
 

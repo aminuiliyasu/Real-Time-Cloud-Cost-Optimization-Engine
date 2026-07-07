@@ -3,86 +3,64 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Real-Time Cloud Cost Optimization Engine</title>
+    <title>Cloud Cost Optimizer</title>
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
-      rel="stylesheet"
-    />
   </head>
   <body>
-    <header class="site-header">
-      <div class="site-header-inner">
-        <div class="brand">
-          <span class="brand-mark" aria-hidden="true">◇</span>
-          <div>
-            <p class="brand-eyebrow">FinOps Platform · FastAPI · Terraform · Docker</p>
-            <h1 class="brand-title">Real-Time Cloud Cost Optimization Engine</h1>
-          </div>
+    <header class="header">
+      <div class="header-inner">
+        <div>
+          <h1>Cloud Cost Optimizer</h1>
+          <p class="subtitle">Monitor AWS/GCP usage and review cost recommendations</p>
         </div>
-        <div class="header-tools">
-          <label class="field field-compact">
-            <span class="field-label">API URL</span>
-            <input id="api-base" type="url" value="http://127.0.0.1:8000" autocomplete="off" />
+        <div class="header-controls">
+          <label>
+            API URL
+            <input id="api-base" type="url" value="http://127.0.0.1:8000" />
           </label>
-          <label class="field field-compact">
-            <span class="field-label">API key</span>
-            <input id="api-key" type="password" placeholder="From your .env" autocomplete="off" />
+          <label>
+            API key
+            <input id="api-key" type="password" placeholder="From .env" />
           </label>
-          <button type="button" id="btn-health" class="btn btn-ghost btn-sm">Test connection</button>
+          <button type="button" id="btn-health" class="btn secondary">Check health</button>
         </div>
       </div>
     </header>
 
-    <main id="main" class="main-wrap">
-      <div id="status-banner" class="status-banner" role="status" aria-live="polite" hidden></div>
-      <div id="health-inline" class="health-inline" role="status" aria-live="polite" hidden></div>
+    <main class="container">
+      <div id="status-banner" class="banner" hidden></div>
+      <div id="health-inline" class="health" hidden></div>
 
-      <!-- Hero: CV headline metrics -->
-      <section class="hero" aria-label="Portfolio summary">
-        <p class="hero-lead">
-          FinOps platform that monitors real AWS usage, identifies waste, and automates rightsizing,
-          scheduled shutdowns, and migration recommendations—with what-if simulations before apply.
-        </p>
-        <div id="hero-stats" class="hero-stats"></div>
-        <div class="hero-actions">
-          <button type="button" id="btn-run-pipeline" class="btn btn-primary btn-lg">
-            Run full analysis (AWS → rules → savings)
-          </button>
-          <button type="button" id="refresh-overview" class="btn btn-secondary">Refresh dashboard</button>
+      <section class="panel hero">
+        <div id="hero-stats" class="stats"></div>
+        <div class="actions">
+          <button type="button" id="btn-run-pipeline" class="btn primary">Run full analysis</button>
+          <button type="button" id="refresh-overview" class="btn secondary">Refresh</button>
         </div>
-        <ol class="demo-steps" aria-label="Demo flow">
-          <li><strong>1. Ingest</strong> — pull EC2 &amp; ECS from live AWS accounts</li>
-          <li><strong>2. Analyze</strong> — rightsizing, shutdowns, migration rules</li>
-          <li><strong>3. Simulate</strong> — what-if savings before approval</li>
-          <li><strong>4. Apply</strong> — approve → execute with audit trail</li>
-        </ol>
+        <p class="hint">
+          Syncs inventory and metrics, then runs the optimization rules.
+          Approve/apply only updates the database — no changes are made in AWS or GCP.
+        </p>
       </section>
 
-      <!-- Accounts -->
-      <section class="card card-accent">
-        <h2 class="card-title">Cloud accounts monitored</h2>
-        <p class="card-desc">Live inventory grouped by AWS account (multi-profile ingestion).</p>
-        <div id="accounts-grid" class="accounts-grid"></div>
+      <section class="panel">
+        <h2>Accounts</h2>
+        <div id="accounts-grid" class="accounts"></div>
       </section>
 
-      <!-- Optimization types -->
-      <section class="card">
-        <h2 class="card-title">Automated optimization types</h2>
-        <div id="opt-breakdown" class="opt-breakdown"></div>
+      <section class="panel">
+        <h2>Optimization breakdown</h2>
+        <div id="opt-breakdown" class="opt-grid"></div>
       </section>
 
-      <!-- Utilization chart -->
-      <section class="card">
-        <div class="card-head">
+      <section class="panel">
+        <div class="panel-head">
           <div>
-            <h2 class="card-title">Real-time usage monitoring</h2>
-            <p class="card-desc">Average CPU &amp; memory from CloudWatch metrics (last <span id="hours-label">24</span>h).</p>
+            <h2>Usage trend</h2>
+            <p class="muted">Average CPU and memory over the selected window.</p>
           </div>
-          <label class="field inline">
-            <span class="field-label">Window</span>
+          <label>
+            Window
             <select id="hours">
               <option value="24" selected>24h</option>
               <option value="48">48h</option>
@@ -91,33 +69,30 @@
             </select>
           </label>
         </div>
-        <p id="chart-note" class="chart-status"></p>
-        <svg id="trend-chart" viewBox="0 0 1000 320" preserveAspectRatio="none" aria-label="Utilization trend"></svg>
+        <p id="chart-note" class="muted"></p>
+        <svg id="trend-chart" viewBox="0 0 1000 280" preserveAspectRatio="none"></svg>
         <div class="legend">
-          <span><i class="dot cpu"></i> CPU %</span>
-          <span><i class="dot memory"></i> Memory %</span>
+          <span><i class="dot cpu"></i> CPU</span>
+          <span><i class="dot memory"></i> Memory</span>
         </div>
       </section>
 
-      <!-- KPIs -->
       <div id="kpis" class="kpi-grid"></div>
 
-      <!-- Resources (collapsed by default feel - simple table) -->
-      <section class="card">
-        <div class="card-head">
+      <section class="panel">
+        <div class="panel-head">
           <div>
-            <h2 class="card-title">Tracked resources</h2>
-            <p class="card-desc">From live AWS discovery.</p>
+            <h2>Resources</h2>
           </div>
-          <div class="button-row">
-            <button type="button" id="ingest-aws-resources" class="btn btn-secondary btn-sm">Sync EC2</button>
-            <button type="button" id="ingest-ecs-resources" class="btn btn-secondary btn-sm">Sync ECS</button>
-            <button type="button" id="ingest-aws-metrics" class="btn btn-secondary btn-sm">Pull metrics</button>
-            <button type="button" id="btn-list-resources" class="btn btn-ghost btn-sm">Reload</button>
+          <div class="actions inline">
+            <button type="button" id="ingest-aws-resources" class="btn secondary small">Sync AWS</button>
+            <button type="button" id="ingest-gcp-resources" class="btn secondary small">Sync GCP</button>
+            <button type="button" id="ingest-aws-metrics" class="btn secondary small">Pull metrics</button>
+            <button type="button" id="btn-list-resources" class="btn secondary small">Reload</button>
           </div>
         </div>
         <div class="table-wrap">
-          <table class="table">
+          <table>
             <thead>
               <tr>
                 <th>Cloud</th>
@@ -132,47 +107,40 @@
         </div>
       </section>
 
-      <!-- Recommendations -->
-      <section class="card">
-        <div class="card-head">
+      <section class="panel">
+        <div class="panel-head">
           <div>
-            <h2 class="card-title">Optimization queue</h2>
-            <p class="card-desc">
-              Rightsizing · scheduled shutdowns · migrations — review, simulate, approve, apply.
-            </p>
+            <h2>Recommendations</h2>
           </div>
-          <div class="button-row">
-            <button type="button" id="run-all-rules" class="btn btn-secondary btn-sm">Run all rules</button>
-            <button type="button" id="reload-recommendations" class="btn btn-ghost btn-sm">Reload</button>
+          <div class="actions inline">
+            <button type="button" id="run-all-rules" class="btn secondary small">Run rules</button>
+            <button type="button" id="reload-recommendations" class="btn secondary small">Reload</button>
           </div>
         </div>
 
-        <article id="sim-card" class="card card-sim" hidden>
-          <div class="card-head">
-            <div>
-              <h3 class="card-title">What-if simulation</h3>
-              <p class="card-desc" id="sim-card-desc">Model projected spend and savings.</p>
-            </div>
-            <button type="button" id="sim-close" class="btn btn-ghost btn-sm">Close</button>
+        <article id="sim-card" class="panel nested" hidden>
+          <div class="panel-head">
+            <h3>What-if simulation</h3>
+            <button type="button" id="sim-close" class="btn secondary small">Close</button>
           </div>
+          <p id="sim-card-desc" class="muted"></p>
           <div class="sim-form">
-            <label class="field">
-              <span class="field-label">Utilization reduction (%)</span>
+            <label>
+              Utilization reduction
               <input id="sim-reduction" type="range" min="5" max="90" step="5" value="30" />
-              <span id="sim-reduction-label" class="range-label">30%</span>
+              <span id="sim-reduction-label">30%</span>
             </label>
-            <button type="button" id="sim-run" class="btn btn-primary">Run simulation</button>
+            <button type="button" id="sim-run" class="btn primary">Run simulation</button>
           </div>
-          <div id="sim-result" class="sim-result" role="region" aria-live="polite"></div>
-          <div id="sim-history-wrap" class="sim-history-wrap" hidden>
-            <h4 class="sim-subheading">Previous runs</h4>
-            <ul id="sim-history" class="sim-history"></ul>
+          <div id="sim-result"></div>
+          <div id="sim-history-wrap" hidden>
+            <h4>Previous runs</h4>
+            <ul id="sim-history"></ul>
           </div>
         </article>
 
-        <p id="actions-note" class="actions-note" role="status"></p>
         <div class="table-wrap">
-          <table class="table">
+          <table>
             <thead>
               <tr>
                 <th>Rule</th>
@@ -180,20 +148,13 @@
                 <th>Severity</th>
                 <th>Status</th>
                 <th>Est. $/mo</th>
-                <th>Workflow</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="recommendations-body"></tbody>
           </table>
         </div>
       </section>
-
-      <footer class="site-footer">
-        <p>
-          Built with Python, FastAPI, SQLAlchemy, AWS APIs, Terraform &amp; Docker —
-          <a href="https://github.com/aminuiliyasu/Real-Time-Cloud-Cost-Optimization-Engine" target="_blank" rel="noopener">GitHub</a>
-        </p>
-      </footer>
     </main>
 
     <script type="module" src="./app.js"></script>

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from app.api.dashboard import router as dashboard_router
+from app.api.gcp_ingestion import router as gcp_ingestion_router
 from app.api.ingestion import router as ingestion_router
 from app.api.resources import router as resources_router
 from app.api.recommendations import router as recommendations_router
@@ -20,6 +21,7 @@ app.add_middleware(
 app.include_router(resources_router)
 app.include_router(recommendations_router)
 app.include_router(ingestion_router)
+app.include_router(gcp_ingestion_router)
 app.include_router(dashboard_router)
 
 
