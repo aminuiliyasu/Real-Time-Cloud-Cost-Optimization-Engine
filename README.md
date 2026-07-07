@@ -4,7 +4,11 @@ Monitors AWS and GCP compute usage, flags waste with simple rules, and lets you 
 
 **Stack:** Python · FastAPI · SQLAlchemy · PostgreSQL · Redis · AWS/GCP APIs · Docker · Terraform
 
-![Dashboard showing waste identified across 4 AWS accounts](docs/dashboard-screenshot.png)
+## Screenshot
+
+Dashboard after running full analysis on 4 AWS accounts:
+
+![Cloud Cost Optimizer dashboard](https://github.com/aminuiliyasu/Real-Time-Cloud-Cost-Optimization-Engine/raw/main/docs/dashboard-screenshot.png)
 
 ---
 
